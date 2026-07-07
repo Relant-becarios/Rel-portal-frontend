@@ -7,91 +7,45 @@ import { gql } from '@apollo/client/core'
 // --- ESTADOS DE CONTROL DE FLUJO ---
 const filtroEstado = ref('TODOS')
 const esModoOscuro = ref(true)
-const busquedaQuery = ref('')
 const comentarioAdmin = ref('')
+const busquedaQuery = ref('')
 
 // --- VARIABLES DE NUEVO TICKET ---
 const correoDestinatario = ref('')
 const asuntoTicket = ref('')
 const cuerpoTicket = ref('')
 
-// --- WORKSPACE: PANEL GRANDE DE TRABAJO Y PERSISTENCIA (F5-PROOF) ---
-const ticketActivoWorkspace = ref<any>(null)
+// --- WORKSPACE EN VIVO ---
+const ticketIdActivo = ref<string | null>(null)
 const notaProgresoActual = ref('')
-const bitacoraProgresoAcumulada = ref<string[]>([])
 
-// Helper para parsear las fechas de PostgreSQL/Prisma de forma segura
+// Buscador dinámico reactivo en el pool de Apollo
+const ticketActivoWorkspace = computed(() => {
+  if (!ticketIdActivo.value) return null
+  return result.value?.misTickets?.find((t: any) => t.id === ticketIdActivo.value) || null
+})
+
+// Conversión del string del chat en renglones reactivos en la pantalla de ambos usuarios
+const bitacoraProgresoAcumulada = computed(() => {
+  const ticket = ticketActivoWorkspace.value
+  if (!ticket) return []
+  return ticket.chat ? ticket.chat.split('\n') : [`[⚙️ Sistema] Esperando primer mensaje de coordinación...`]
+})
+
+// Helper para parsear las fechas de PostgreSQL de forma segura
 const parsearFecha = (fecha: any) => {
   if (!fecha) return null
   if (!isNaN(Number(fecha))) return new Date(Number(fecha))
   return new Date(fecha)
 }
 
-// Monitorear la apertura de tickets para cargar logs locales o generar la línea de tiempo real
-watch(ticketActivoWorkspace, (nuevoTicket) => {
-  if (!nuevoTicket) {
-    bitacoraProgresoAcumulada.value = []
-    return
-  }
-
-  // Si el ticket está activamente en desarrollo, cargamos su bitácora local
-  if (nuevoTicket.estado === 'TRABAJANDO') {
-    const guardado = localStorage.getItem('relant_workspace_log')
-    if (guardado) {
-      const data = JSON.parse(guardado)
-      if (data.ticketId === nuevoTicket.id) {
-        bitacoraProgresoAcumulada.value = data.logs || []
-        return
-      }
-    }
-    bitacoraProgresoAcumulada.value = [`[${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}] 🛠️ Orden de trabajo iniciada.`]
-  } 
-  // Si está completado o cerrado, construimos la línea de tiempo con datos reales de la base de datos
-  else {
-    const timeline: string[] = []
-    const fRecibido = parsearFecha(nuevoTicket.fecha_recibido)
-    if (fRecibido) timeline.push(`[📥 Recibido] ${fRecibido.toLocaleString()}`)
-    
-    const fTrabajando = parsearFecha(nuevoTicket.fecha_trabajando)
-    if (fTrabajando) timeline.push(`[🛠️ En Desarrollo] ${fTrabajando.toLocaleString()}`)
-    
-    const fCompletado = parsearFecha(nuevoTicket.fecha_completado)
-    if (fCompletado) timeline.push(`[🏁 Completado] ${fCompletado.toLocaleString()}`)
-    
-    const fEvaluacion = parsearFecha(nuevoTicket.fecha_evaluacion)
-    if (fEvaluacion) {
-      const prefijo = nuevoTicket.estado === 'APROBADO' ? '✓ Aprobado' : '✕ Rechazado'
-      timeline.push(`[${prefijo}] ${fEvaluacion.toLocaleString()}`)
-    }
-    bitacoraProgresoAcumulada.value = timeline
-  }
-})
-
-// Recuperar bitácoras activas en caso de F5 en caliente
+// Carga inicial de persistencia ante recargas accidentales
 onMounted(() => {
-  const guardado = localStorage.getItem('relant_workspace_log')
-  if (guardado) {
-    const data = JSON.parse(guardado)
-    if (data.ticketId && ticketActivoWorkspace.value?.id === data.ticketId) {
-      bitacoraProgresoAcumulada.value = data.logs || []
-    }
-  }
+  const guardado = localStorage.getItem('relant_active_ticket_id')
+  if (guardado) ticketIdActivo.value = guardado
 })
 
-// Registrar actualizaciones en LocalStorage ante F5
-const registrarProgresoEnCaliente = () => {
-  if (!notaProgresoActual.value.trim()) return
-  const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-  bitacoraProgresoAcumulada.value.push(`[${timestamp}] 🚀 ${notaProgresoActual.value.trim()}`)
-  notaProgresoActual.value = ''
-  
-  localStorage.setItem('relant_workspace_log', JSON.stringify({
-    ticketId: ticketActivoWorkspace.value?.id,
-    logs: bitacoraProgresoAcumulada.value
-  }))
-}
-
-// --- 🔒 GRAPHQL API CENTRAL (ACTUALIZADA CON RELACIONES DE PRISMA) ---
+// --- 🔒 GRAPHQL API CENTRAL ---
 const OBTENER_DATOS_DASHBOARD = gql`
   query GetDashboardData {
     me {
@@ -112,6 +66,7 @@ const OBTENER_DATOS_DASHBOARD = gql`
       fecha_evaluacion
       creadorId
       asignadoId
+      chat
       creador {
         email
         nombre
@@ -123,20 +78,23 @@ const OBTENER_DATOS_DASHBOARD = gql`
     }
   }
 `
-// ✅ CORREGIDO: Nombre de variable sincronizado sin errores de dedo
 const { result, loading, error, refetch } = useQuery(OBTENER_DATOS_DASHBOARD)
 
-// Mutaciones Nativas de tu Servidor
 const CREAR_TICKET = gql`
   mutation NuevoTicket($titulo: String!, $descripcion: String!, $asignadoEmail: String) {
     crearTicket(titulo: $titulo, descripcion: $descripcion, asignadoEmail: $asignadoEmail) { id }
   }
 `
 const INICIAR_TRABAJO = gql` mutation Iniciar($ticketId: String!) { iniciarTrabajo(ticketId: $ticketId) { id estado } } `
-const COMPLETAR_TRABAJO = gql` mutation Completar($ticketId: String!) { completarTrabajo(ticketId: $ticketId) { id estado } } `
+const COMPLETAR_TRABAJO = gql` mutation Completar($ticketId: String!, $notas: String) { completarTrabajo(ticketId: $ticketId, notas: $notas) { id estado } } `
 const EVALUAR_TICKET = gql`
   mutation Evaluar($ticketId: String!, $aprobado: Boolean!, $comentario: String!) {
     evaluarTicket(ticketId: $ticketId, aprobado: $aprobado, comentario: $comentario) { id estado }
+  }
+`
+const ENVIAR_MENSAJE_CHAT = gql`
+  mutation EnviarMensaje($ticketId: String!, $texto: String!) {
+    enviarMensajeChat(ticketId: $ticketId, texto: $texto) { id chat }
   }
 `
 
@@ -144,24 +102,20 @@ const { mutate: apiCrear } = useMutation(CREAR_TICKET)
 const { mutate: apiIniciar } = useMutation(INICIAR_TRABAJO)
 const { mutate: apiCompletar } = useMutation(COMPLETAR_TRABAJO)
 const { mutate: apiEvaluar } = useMutation(EVALUAR_TICKET)
+const { mutate: apiChat } = useMutation(ENVIAR_MENSAJE_CHAT)
 
-// Detector de Rol desde Prisma Studio
 const esAdmin = computed(() => result.value?.me?.rol === 'ADMIN')
 
-// KPIs Reactivos
 const totalTickets = computed(() => ticketsFiltradosConPrivacidad.value.length)
 const ticketsPendientes = computed(() => ticketsFiltradosConPrivacidad.value.filter((t: any) => t?.estado === 'RECIBIDO' || t?.estado === 'TRABAJANDO').length)
 const ticketsCompletados = computed(() => ticketsFiltradosConPrivacidad.value.filter((t: any) => t?.estado === 'APROBADO').length)
 
-// Formateador de SLA adaptado para producción
 const formatearTiempoSLA = (ticket: any) => {
   if (!ticket || !ticket.fecha_recibido) return 'Sin registro'
   const inicio = parsearFecha(ticket.fecha_trabajando || ticket.fecha_recibido)
   const fin = ticket.fecha_completado ? parsearFecha(ticket.fecha_completado) : new Date()
-  
   if (!inicio || !fin) return 'Sin registro'
   const minutosTotales = Math.floor((fin.getTime() - inicio.getTime()) / 1000 / 60)
-  
   if (ticket.estado === 'RECIBIDO') return '⏳ Esperando Atención'
   return ticket.fecha_completado ? `⏱️ Resuelto en: ${minutosTotales}m` : `🏃 En curso: ${minutosTotales}m`
 }
@@ -182,7 +136,6 @@ const manejarEnviarTicket = async () => {
   } catch (err: any) { alert('Error: ' + err.message) }
 }
 
-// --- 🔥 MOTOR FILTRADO: RECEPTOR AISLADO O MESA GENERAL ---
 const ticketsFiltradosConPrivacidad = computed(() => {
   const tickets = result.value?.misTickets || []
   const miIdPrisma = result.value?.me?.id || ''
@@ -210,26 +163,30 @@ const ticketsFiltradosConPrivacidad = computed(() => {
   return filtrados
 })
 
-// --- Controladores de Flujo del Panel Grande ---
 const activarProcesamientoTicket = async (ticket: any) => {
   try {
     await apiIniciar({ ticketId: ticket.id })
-    const ticketModificado = { ...ticket, estado: 'TRABAJANDO' }
-    ticketActivoWorkspace.value = ticketModificado
+    ticketIdActivo.value = ticket.id
+    localStorage.setItem('relant_active_ticket_id', ticket.id)
     refetch()
   } catch (e) {}
 }
 
-const despacharAuditoriaAdmin = async () => {
-  if (bitacoraProgresoAcumulada.value.length <= 1) {
-    alert('⚠️ Por favor agrega al menos una actualización de progreso antes de enviar.')
-    return
-  }
+const registrarProgresoEnCaliente = async () => {
+  if (!notaProgresoActual.value.trim() || !ticketIdActivo.value) return
   try {
-    await apiCompletar({ ticketId: ticketActivoWorkspace.value.id })
-    localStorage.removeItem('relant_workspace_log')
-    ticketActivoWorkspace.value = null
-    bitacoraProgresoAcumulada.value = []
+    await apiChat({ ticketId: ticketIdActivo.value, texto: notaProgresoActual.value.trim() })
+    notaProgresoActual.value = ''
+    refetch()
+  } catch (e: any) { alert('Error al enviar mensaje: ' + e.message) }
+}
+
+const despacharAuditoriaAdmin = async () => {
+  try {
+    const bitacoraFormateada = bitacoraProgresoAcumulada.value.join('\n')
+    await apiCompletar({ ticketId: ticketIdActivo.value, notas: bitacoraFormateada })
+    localStorage.removeItem('relant_active_ticket_id')
+    ticketIdActivo.value = null
     alert('🏁 Ticket enviado de forma automatizada a la bandeja de los administradores.')
     refetch()
   } catch (e) {}
@@ -242,11 +199,12 @@ const ejecutarDictamenAdmin = async (aprobado: boolean) => {
   }
   try {
     await apiEvaluar({
-      ticketId: ticketActivoWorkspace.value.id,
+      ticketId: ticketIdActivo.value,
       aprobado,
       comentario: comentarioAdmin.value.trim()
     })
-    ticketActivoWorkspace.value = null
+    localStorage.removeItem('relant_active_ticket_id')
+    ticketIdActivo.value = null
     comentarioAdmin.value = ''
     alert(aprobado ? '✓ Ticket liberado y archivado con éxito.' : '✕ Ticket rechazado y devuelto a desarrollo.')
     refetch()
@@ -284,7 +242,7 @@ const ejecutarDictamenAdmin = async (aprobado: boolean) => {
                 <span class="text-xs font-bold text-red-400 uppercase tracking-widest">Mesa de Trabajo de Alta Prioridad</span>
                 <h3 class="text-xl font-black text-white mt-1">{{ ticketActivoWorkspace.titulo }}</h3>
               </div>
-              <button @click="ticketActivoWorkspace = null" class="text-zinc-400 hover:text-white font-bold bg-zinc-800 px-4 py-2 rounded-xl text-xs cursor-pointer">
+              <button @click="ticketIdActivo = null" class="text-zinc-400 hover:text-white font-bold bg-zinc-800 px-4 py-2 rounded-xl text-xs cursor-pointer">
                 ✕ Minimizar Panel
               </button>
             </div>
@@ -311,7 +269,7 @@ const ejecutarDictamenAdmin = async (aprobado: boolean) => {
 
                 <div>
                   <label class="text-[10px] uppercase font-bold text-zinc-500 block">Instrucción y Descripción Inicial</label>
-                  <p class="text-sm text-zinc-300 whitespace-pre-line mt-1 bg-zinc-900/40 p-4 rounded-xl border border-zinc-800/40 leading-relaxed max-h-40 overflow-y-auto">
+                  <p class="text-sm text-zinc-300 whitespace-pre-line mt-1 bg-zinc-900/40 p-4 rounded-xl border border-zinc-800/40 leading-relaxed max-h-48 overflow-y-auto font-sans">
                     {{ ticketActivoWorkspace.descripcion }}
                   </p>
                 </div>
@@ -334,7 +292,7 @@ const ejecutarDictamenAdmin = async (aprobado: boolean) => {
 
                 <div v-if="ticketActivoWorkspace.estado === 'TRABAJANDO'" class="space-y-3 pt-2 border-t border-zinc-800">
                   <div class="flex gap-2">
-                    <input v-model="notaProgresoActual" @keyup.enter="registrarProgresoEnCaliente" type="text" placeholder="Escribe un avance (ej: Servidor Apache reconfigurado)..." class="bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-2.5 text-xs flex-1 text-white focus:outline-hidden focus:border-red-700" />
+                    <input v-model="notaProgresoActual" @keyup.enter="registrarProgresoEnCaliente" type="text" placeholder="Escribe un avance o mensaje..." class="bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-2.5 text-xs flex-1 text-white focus:outline-hidden focus:border-red-700" />
                     <button @click="registrarProgresoEnCaliente" class="bg-zinc-800 hover:bg-zinc-700 text-white font-bold text-xs px-4 py-2.5 rounded-xl cursor-pointer">➕ Log</button>
                   </div>
                   <button @click="despacharAuditoriaAdmin" class="w-full bg-red-700 hover:bg-red-800 text-white font-black text-xs uppercase tracking-widest py-3 rounded-xl shadow-md transition cursor-pointer">
@@ -389,7 +347,7 @@ const ejecutarDictamenAdmin = async (aprobado: boolean) => {
           <form @submit.prevent="manejarEnviarTicket" class="p-6 space-y-4">
             <div class="flex items-center border-b pb-2 border-zinc-800">
               <label class="w-16 text-xs font-bold text-zinc-400 uppercase">Para:</label>
-              <input v-model="correoDestinatario" type="email" required :class="esModoOscuro ? 'bg-transparent text-white' : 'bg-transparent text-slate-900'" class="w-full text-sm focus:outline-hidden" placeholder="correo@relant.com" />
+              <input v-model="correoDestinatario" type="text" required :class="esModoOscuro ? 'bg-transparent text-white' : 'bg-transparent text-slate-900'" class="w-full text-sm focus:outline-hidden" placeholder="correo@relant.com o Nombre del usuario" />
             </div>
             <div class="flex items-center border-b pb-2 border-zinc-800">
               <label class="w-16 text-xs font-bold text-zinc-400 uppercase">Asunto:</label>
@@ -427,7 +385,6 @@ const ejecutarDictamenAdmin = async (aprobado: boolean) => {
               <div class="flex flex-wrap items-center gap-3 text-xs">
                 <span class="font-mono font-bold bg-zinc-950 px-2.5 py-1 rounded-md text-zinc-300 border border-zinc-800">{{ 'RLN-' + ticket.id.substring(0,6).toUpperCase() }}</span>
                 
-                <!-- 🎯 COBERTURA DE RASTREO COMPLETA: MUESTRA EMISOR Y RECEPTOR DE PRISMA -->
                 <span class="text-zinc-400 font-semibold bg-zinc-950/60 px-2.5 py-1 rounded-md border border-zinc-800 flex items-center gap-1.5">
                   📩 De: <strong class="text-red-400" :title="ticket.creador?.email">{{ ticket.creador?.nombre || ticket.creador?.email || 'Mesa Central' }}</strong>
                   <span class="text-zinc-600 font-black">➡️</span>
@@ -440,9 +397,10 @@ const ejecutarDictamenAdmin = async (aprobado: boolean) => {
             <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
               <div class="flex-1">
                 <h4 class="text-lg font-black tracking-tight text-white">{{ ticket.titulo }}</h4>
-                <p class="text-xs text-zinc-400 mt-1 line-clamp-2">{{ ticket.descripcion }}</p>
+                <p class="text-xs text-zinc-300 mt-2 whitespace-pre-line bg-zinc-950/40 p-3 rounded-xl border border-zinc-800/40 leading-relaxed font-sans max-h-48 overflow-y-auto">
+                  {{ ticket.descripcion }}
+                </p>
                 
-                <!-- Bloque Visual de Retroalimentación de Administración para el Empleado -->
                 <div v-if="ticket.comentario_admin" class="mt-3 p-3 rounded-xl bg-zinc-950 border border-zinc-800 text-xs max-w-2xl">
                   <span class="font-bold text-red-400 block mb-0.5">💬 Justificación de Administración:</span>
                   <p class="text-zinc-300 italic">"{{ ticket.comentario_admin }}"</p>
@@ -456,19 +414,18 @@ const ejecutarDictamenAdmin = async (aprobado: boolean) => {
                 <button v-if="ticket.estado === 'RECIBIDO'" @click="activarProcesamientoTicket(ticket)" class="bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold px-5 py-2.5 rounded-xl transition cursor-pointer w-full md:w-auto">
                   🛠️ Procesar Requerimiento
                 </button>
-                <button v-if="ticket.estado === 'TRABAJANDO'" @click="ticketActivoWorkspace = ticket" class="bg-red-700 hover:bg-red-800 text-white text-xs font-bold px-5 py-2.5 rounded-xl transition cursor-pointer w-full md:w-auto">
-                  💼 Abrir Panel Grande de Progreso
+                <button v-if="ticket.estado === 'TRABAJANDO'" @click="ticketIdActivo = ticket.id" class="bg-red-700 hover:bg-red-800 text-white text-xs font-bold px-5 py-2.5 rounded-xl transition cursor-pointer w-full md:w-auto">
+                  💼 Abrir Panel Grande / Chat
                 </button>
-                <button v-if="ticket.estado === 'COMPLETADO'" @click="ticketActivoWorkspace = ticket" class="bg-linear-to-r from-red-950 to-zinc-900 border border-red-900/40 text-red-400 text-xs font-black px-5 py-2.5 rounded-xl transition cursor-pointer w-full md:w-auto">
+                <button v-if="ticket.estado === 'COMPLETADO'" @click="ticketIdActivo = ticket.id" class="bg-linear-to-r from-red-950 to-zinc-900 border border-red-900/40 text-red-400 text-xs font-black px-5 py-2.5 rounded-xl transition cursor-pointer w-full md:w-auto">
                   {{ esAdmin ? '🛡️ Auditar y Dictaminar Folio' : '⏳ Ver Estatus en Revisión' }}
                 </button>
-                <button v-if="ticket.estado === 'APROBADO'" @click="ticketActivoWorkspace = ticket" class="text-xs font-bold tracking-wider uppercase px-4 py-2 rounded-xl border border-dashed border-zinc-800 text-zinc-400 hover:text-zinc-200 cursor-pointer text-center w-full md:w-auto select-none">
-                  🔒 Liberado (Ver)
+                <button v-if="ticket.estado === 'APROBADO'" @click="ticketIdActivo = ticket.id" class="text-xs font-bold tracking-wider uppercase px-4 py-2 rounded-xl border border-dashed border-zinc-800 text-zinc-400 hover:text-zinc-200 cursor-pointer text-center w-full md:w-auto select-none">
+                  🔒 Liberado (Ver Chat)
                 </button>
                 
-                <!-- Botones para ciclo de rechazo infinito -->
                 <div v-if="ticket.estado === 'RECHAZADO'" class="flex gap-2 w-full md:w-auto">
-                  <button @click="ticketActivoWorkspace = ticket" class="text-xs font-bold tracking-wider uppercase px-4 py-2 rounded-xl border border-dashed border-zinc-800 text-zinc-400 hover:text-zinc-200 cursor-pointer text-center flex-1 md:flex-initial">
+                  <button @click="ticketIdActivo = ticket.id" class="text-xs font-bold tracking-wider uppercase px-4 py-2 rounded-xl border border-dashed border-zinc-800 text-zinc-400 hover:text-zinc-200 cursor-pointer text-center flex-1 md:flex-initial">
                     👁️ Ver Acta
                   </button>
                   <button @click="activarProcesamientoTicket(ticket)" class="bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold px-4 py-2 rounded-xl transition cursor-pointer flex-1 md:flex-initial text-center">
