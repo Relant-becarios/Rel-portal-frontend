@@ -62,7 +62,7 @@ const comunicados = [
 
             <div class="mt-6 flex flex-wrap gap-3 pt-2">
               <router-link to="/tickets" class="bg-white text-red-800 hover:bg-slate-100 px-6 py-2.5 rounded-xl font-bold text-xs shadow-xl transition text-center">
-                📊 Abrir Mesa de Ayuda
+                📊 Abrir Tickets
               </router-link>
               <button class="bg-red-950/20 hover:bg-red-950/30 border border-red-900/10 px-6 py-2.5 rounded-xl font-bold text-xs transition cursor-not-allowed select-none text-red-300/60 text-center">
                 🛒 Marketplace de Insumos (Próximamente)

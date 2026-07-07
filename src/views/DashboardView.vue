@@ -20,12 +20,59 @@ const ticketActivoWorkspace = ref<any>(null)
 const notaProgresoActual = ref('')
 const bitacoraProgresoAcumulada = ref<string[]>([])
 
-// Recuperar bitácoras activas en caso de F5
+// Helper para parsear las fechas de PostgreSQL/Prisma de forma segura
+const parsearFecha = (fecha: any) => {
+  if (!fecha) return null
+  if (!isNaN(Number(fecha))) return new Date(Number(fecha))
+  return new Date(fecha)
+}
+
+// Monitorear la apertura de tickets para cargar logs locales o generar la línea de tiempo real
+watch(ticketActivoWorkspace, (nuevoTicket) => {
+  if (!nuevoTicket) {
+    bitacoraProgresoAcumulada.value = []
+    return
+  }
+
+  // Si el ticket está activamente en desarrollo, cargamos su bitácora local
+  if (nuevoTicket.estado === 'TRABAJANDO') {
+    const guardado = localStorage.getItem('relant_workspace_log')
+    if (guardado) {
+      const data = JSON.parse(guardado)
+      if (data.ticketId === nuevoTicket.id) {
+        bitacoraProgresoAcumulada.value = data.logs || []
+        return
+      }
+    }
+    bitacoraProgresoAcumulada.value = [`[${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}] 🛠️ Orden de trabajo iniciada.`]
+  } 
+  // Si está completado o cerrado, construimos la línea de tiempo con datos reales de la base de datos
+  else {
+    const timeline: string[] = []
+    const fRecibido = parsearFecha(nuevoTicket.fecha_recibido)
+    if (fRecibido) timeline.push(`[📥 Recibido] ${fRecibido.toLocaleString()}`)
+    
+    const fTrabajando = parsearFecha(nuevoTicket.fecha_trabajando)
+    if (fTrabajando) timeline.push(`[🛠️ En Desarrollo] ${fTrabajando.toLocaleString()}`)
+    
+    const fCompletado = parsearFecha(nuevoTicket.fecha_completado)
+    if (fCompletado) timeline.push(`[🏁 Completado] ${fCompletado.toLocaleString()}`)
+    
+    const fEvaluacion = parsearFecha(nuevoTicket.fecha_evaluacion)
+    if (fEvaluacion) {
+      const prefijo = nuevoTicket.estado === 'APROBADO' ? '✓ Aprobado' : '✕ Rechazado'
+      timeline.push(`[${prefijo}] ${fEvaluacion.toLocaleString()}`)
+    }
+    bitacoraProgresoAcumulada.value = timeline
+  }
+})
+
+// Recuperar bitácoras activas en caso de F5 en caliente
 onMounted(() => {
   const guardado = localStorage.getItem('relant_workspace_log')
   if (guardado) {
     const data = JSON.parse(guardado)
-    if (data.ticketId) {
+    if (data.ticketId && ticketActivoWorkspace.value?.id === data.ticketId) {
       bitacoraProgresoAcumulada.value = data.logs || []
     }
   }
@@ -62,6 +109,7 @@ const OBTENER_DATOS_DASHBOARD = gql`
       fecha_recibido
       fecha_trabajando
       fecha_completado
+      fecha_evaluacion
       asignadoId
       creador {
         email
@@ -99,12 +147,15 @@ const totalTickets = computed(() => ticketsFiltradosConPrivacidad.value.length)
 const ticketsPendientes = computed(() => ticketsFiltradosConPrivacidad.value.filter((t: any) => t?.estado === 'RECIBIDO' || t?.estado === 'TRABAJANDO').length)
 const ticketsCompletados = computed(() => ticketsFiltradosConPrivacidad.value.filter((t: any) => t?.estado === 'APROBADO').length)
 
-// Formateador de SLA
+// Formateador de SLA adaptado para producción
 const formatearTiempoSLA = (ticket: any) => {
   if (!ticket || !ticket.fecha_recibido) return 'Sin registro'
-  const inicio = Number(ticket.fecha_trabajando || ticket.fecha_recibido)
-  const fin = ticket.fecha_completado ? Number(ticket.fecha_completado) : Date.now()
-  const minutosTotales = Math.floor((fin - inicio) / 1000 / 60)
+  const inicio = parsearFecha(ticket.fecha_trabajando || ticket.fecha_recibido)
+  const fin = ticket.fecha_completado ? parsearFecha(ticket.fecha_completado) : new Date()
+  
+  if (!inicio || !fin) return 'Sin registro'
+  const minutosTotales = Math.floor((fin.getTime() - inicio.getTime()) / 1000 / 60)
+  
   if (ticket.estado === 'RECIBIDO') return '⏳ Esperando Atención'
   return ticket.fecha_completado ? `⏱️ Resuelto en: ${minutosTotales}m` : `🏃 En curso: ${minutosTotales}m`
 }
@@ -158,8 +209,6 @@ const activarProcesamientoTicket = async (ticket: any) => {
   try {
     await apiIniciar({ ticketId: ticket.id })
     ticketActivoWorkspace.value = ticket
-    bitacoraProgresoAcumulada.value = [`[${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}] 🛠️ Orden de trabajo iniciada.` ]
-    localStorage.setItem('relant_workspace_log', JSON.stringify({ ticketId: ticket.id, logs: bitacoraProgresoAcumulada.value }))
     refetch()
   } catch (e) {}
 }
@@ -170,14 +219,7 @@ const despacharAuditoriaAdmin = async () => {
     return
   }
   try {
-    // Unimos la descripción con el log de trabajo de forma legible e indeformable ante un F5
-    const bitacoraFormateada = bitacoraProgresoAcumulada.value.join('\n')
-    const nuevaDescripcionGlobal = `${ticketActivoWorkspace.value.descripcion}\n\n=================================\n📋 REPORTE DE AVANCES DEL EMPLEADO:\n=================================\n${bitacoraFormateada}`
-
-    // Actualizamos el estado a COMPLETADO en PostgreSQL
     await apiCompletar({ ticketId: ticketActivoWorkspace.value.id })
-    
-    // Opcional: Se limpia el workspace local tras guardado exitoso
     localStorage.removeItem('relant_workspace_log')
     ticketActivoWorkspace.value = null
     bitacoraProgresoAcumulada.value = []
@@ -252,9 +294,14 @@ const ejecutarDictamenAdmin = async (aprobado: boolean) => {
 
                 <div>
                   <label class="text-[10px] uppercase font-bold text-zinc-500 block">Instrucción y Descripción Inicial</label>
-                  <p class="text-sm text-zinc-300 whitespace-pre-line mt-1 bg-zinc-900/40 p-4 rounded-xl border border-zinc-800/40 leading-relaxed max-h-64 overflow-y-auto">
+                  <p class="text-sm text-zinc-300 whitespace-pre-line mt-1 bg-zinc-900/40 p-4 rounded-xl border border-zinc-800/40 leading-relaxed max-h-48 overflow-y-auto">
                     {{ ticketActivoWorkspace.descripcion }}
                   </p>
+                </div>
+
+                <div v-if="ticketActivoWorkspace.comentario_admin" class="mt-2 p-4 rounded-xl bg-red-950/20 border border-red-900/40">
+                  <label class="text-[10px] uppercase font-bold text-red-400 block tracking-wider">⚠️ Comentarios del Dictamen Anterior</label>
+                  <p class="text-xs text-zinc-300 italic mt-1">"{{ ticketActivoWorkspace.comentario_admin }}"</p>
                 </div>
               </div>
 
@@ -370,9 +417,17 @@ const ejecutarDictamenAdmin = async (aprobado: boolean) => {
             </div>
 
             <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-              <div>
+              <div class="flex-1">
                 <h4 class="text-lg font-black tracking-tight text-white">{{ ticket.titulo }}</h4>
                 <p class="text-xs text-zinc-400 mt-1 line-clamp-2">{{ ticket.descripcion }}</p>
+                
+                <div v-if="ticket.comentario_admin" class="mt-3 p-3 rounded-xl bg-zinc-950 border border-zinc-800 text-xs max-w-2xl">
+                  <span class="font-bold text-red-400 block mb-0.5">💬 Justificación de Administración:</span>
+                  <p class="text-zinc-300 italic">"{{ ticket.comentario_admin }}"</p>
+                  <span v-if="ticket.fecha_evaluacion" class="text-[10px] text-zinc-500 block mt-1">
+                    Evaluado el: {{ parsearFecha(ticket.fecha_evaluacion)?.toLocaleString() }}
+                  </span>
+                </div>
               </div>
 
               <div class="shrink-0 flex gap-2 w-full md:w-auto">
@@ -385,9 +440,9 @@ const ejecutarDictamenAdmin = async (aprobado: boolean) => {
                 <button v-if="ticket.estado === 'COMPLETADO'" @click="ticketActivoWorkspace = ticket" class="bg-linear-to-r from-red-950 to-zinc-900 border border-red-900/40 text-red-400 text-xs font-black px-5 py-2.5 rounded-xl transition cursor-pointer w-full md:w-auto">
                   {{ esAdmin ? '🛡️ Auditar y Dictaminar Folio' : '⏳ Ver Estatus en Revisión' }}
                 </button>
-                <span v-if="ticket.estado === 'APROBADO' || ticket.estado === 'RECHAZADO'" class="text-xs font-bold tracking-wider uppercase px-4 py-2 rounded-xl border border-dashed border-zinc-800 text-zinc-500 select-none">
-                  🔒 {{ ticket.estado === 'APROBADO' ? 'Liberado' : 'Rechazado' }}
-                </span>
+                <button v-if="ticket.estado === 'APROBADO' || ticket.estado === 'RECHAZADO'" @click="ticketActivoWorkspace = ticket" class="text-xs font-bold tracking-wider uppercase px-4 py-2 rounded-xl border border-dashed border-zinc-800 text-zinc-400 hover:text-zinc-200 cursor-pointer text-center w-full md:w-auto select-none">
+                  🔒 {{ ticket.estado === 'APROBADO' ? 'Liberado (Ver)' : 'Rechazado (Ver)' }}
+                </button>
               </div>
             </div>
           </div>

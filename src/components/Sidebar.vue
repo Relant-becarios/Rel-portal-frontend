@@ -39,7 +39,7 @@ const manejarCerrarSesion = async () => {
             ? 'bg-red-700 text-white font-semibold shadow-md shadow-red-700/10' 
             : (dark ? 'hover:bg-zinc-800 hover:text-white' : 'hover:bg-slate-100 text-slate-700')" 
           class="flex items-center space-x-3 px-4 py-2.5 rounded-xl text-sm transition font-medium">
-          <span>🎫</span> <span>Mesa de Ayuda</span>
+          <span>🎫</span> <span>Tickets</span>
         </router-link>
       </nav>
     </div>
