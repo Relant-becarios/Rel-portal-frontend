@@ -91,7 +91,7 @@ const registrarProgresoEnCaliente = () => {
   }))
 }
 
-// --- 🔒 GRAPHQL API CENTRAL ---
+// --- 🔒 GRAPHQL API CENTRAL (ACTUALIZADA CON RELACIONES DE PRISMA) ---
 const OBTENER_DATOS_DASHBOARD = gql`
   query GetDashboardData {
     me {
@@ -110,14 +110,20 @@ const OBTENER_DATOS_DASHBOARD = gql`
       fecha_trabajando
       fecha_completado
       fecha_evaluacion
+      creadorId
       asignadoId
       creador {
+        email
+        nombre
+      }
+      asignado {
         email
         nombre
       }
     }
   }
 `
+// ✅ CORREGIDO: Nombre de variable sincronizado sin errores de dedo
 const { result, loading, error, refetch } = useQuery(OBTENER_DATOS_DASHBOARD)
 
 // Mutaciones Nativas de tu Servidor
@@ -208,7 +214,8 @@ const ticketsFiltradosConPrivacidad = computed(() => {
 const activarProcesamientoTicket = async (ticket: any) => {
   try {
     await apiIniciar({ ticketId: ticket.id })
-    ticketActivoWorkspace.value = ticket
+    const ticketModificado = { ...ticket, estado: 'TRABAJANDO' }
+    ticketActivoWorkspace.value = ticketModificado
     refetch()
   } catch (e) {}
 }
@@ -287,14 +294,24 @@ const ejecutarDictamenAdmin = async (aprobado: boolean) => {
               <div class="bg-zinc-950 border border-zinc-800/60 rounded-2xl p-5 flex flex-col space-y-4">
                 <h4 class="text-xs font-bold text-zinc-400 uppercase tracking-widest border-b border-zinc-800 pb-2">Diagnóstico e Historial</h4>
                 
-                <div>
-                  <label class="text-[10px] uppercase font-bold text-zinc-500 block">Remitente Corporativo</label>
-                  <p class="text-sm font-semibold text-zinc-300 mt-0.5">{{ ticketActivoWorkspace.creador?.email || 'Mesa de Entrada Nv. 1' }}</p>
+                <div class="grid grid-cols-2 gap-4 bg-zinc-900/30 p-3 rounded-xl border border-zinc-800/50">
+                  <div>
+                    <label class="text-[9px] uppercase font-bold text-zinc-500 block">De (Creador)</label>
+                    <p class="text-xs font-bold text-red-400 mt-0.5 truncate" :title="ticketActivoWorkspace.creador?.email">
+                      {{ ticketActivoWorkspace.creador?.nombre || ticketActivoWorkspace.creador?.email || 'Mesa Central' }}
+                    </p>
+                  </div>
+                  <div>
+                    <label class="text-[9px] uppercase font-bold text-zinc-500 block">Para (Asignado)</label>
+                    <p class="text-xs font-bold text-amber-400 mt-0.5 truncate" :title="ticketActivoWorkspace.asignado?.email">
+                      {{ ticketActivoWorkspace.asignado?.nombre || ticketActivoWorkspace.asignado?.email || 'Sin Asignar' }}
+                    </p>
+                  </div>
                 </div>
 
                 <div>
                   <label class="text-[10px] uppercase font-bold text-zinc-500 block">Instrucción y Descripción Inicial</label>
-                  <p class="text-sm text-zinc-300 whitespace-pre-line mt-1 bg-zinc-900/40 p-4 rounded-xl border border-zinc-800/40 leading-relaxed max-h-48 overflow-y-auto">
+                  <p class="text-sm text-zinc-300 whitespace-pre-line mt-1 bg-zinc-900/40 p-4 rounded-xl border border-zinc-800/40 leading-relaxed max-h-40 overflow-y-auto">
                     {{ ticketActivoWorkspace.descripcion }}
                   </p>
                 </div>
@@ -409,8 +426,12 @@ const ejecutarDictamenAdmin = async (aprobado: boolean) => {
             <div class="flex flex-wrap justify-between items-center gap-4 border-b border-zinc-800 pb-3">
               <div class="flex flex-wrap items-center gap-3 text-xs">
                 <span class="font-mono font-bold bg-zinc-950 px-2.5 py-1 rounded-md text-zinc-300 border border-zinc-800">{{ 'RLN-' + ticket.id.substring(0,6).toUpperCase() }}</span>
-                <span class="text-zinc-400 font-semibold bg-zinc-950/60 px-2.5 py-1 rounded-md border border-zinc-800">
-                  📩 De: <strong class="text-red-400">{{ ticket.creador?.email || 'Mesa Central' }}</strong>
+                
+                <!-- 🎯 COBERTURA DE RASTREO COMPLETA: MUESTRA EMISOR Y RECEPTOR DE PRISMA -->
+                <span class="text-zinc-400 font-semibold bg-zinc-950/60 px-2.5 py-1 rounded-md border border-zinc-800 flex items-center gap-1.5">
+                  📩 De: <strong class="text-red-400" :title="ticket.creador?.email">{{ ticket.creador?.nombre || ticket.creador?.email || 'Mesa Central' }}</strong>
+                  <span class="text-zinc-600 font-black">➡️</span>
+                  👤 Para: <strong class="text-amber-400" :title="ticket.asignado?.email">{{ ticket.asignado?.nombre || ticket.asignado?.email || 'Sin Asignar' }}</strong>
                 </span>
               </div>
               <span class="text-xs font-bold px-3 py-1 rounded-lg border border-zinc-800 bg-zinc-950">{{ formatearTiempoSLA(ticket) }}</span>
@@ -421,6 +442,7 @@ const ejecutarDictamenAdmin = async (aprobado: boolean) => {
                 <h4 class="text-lg font-black tracking-tight text-white">{{ ticket.titulo }}</h4>
                 <p class="text-xs text-zinc-400 mt-1 line-clamp-2">{{ ticket.descripcion }}</p>
                 
+                <!-- Bloque Visual de Retroalimentación de Administración para el Empleado -->
                 <div v-if="ticket.comentario_admin" class="mt-3 p-3 rounded-xl bg-zinc-950 border border-zinc-800 text-xs max-w-2xl">
                   <span class="font-bold text-red-400 block mb-0.5">💬 Justificación de Administración:</span>
                   <p class="text-zinc-300 italic">"{{ ticket.comentario_admin }}"</p>
@@ -440,9 +462,19 @@ const ejecutarDictamenAdmin = async (aprobado: boolean) => {
                 <button v-if="ticket.estado === 'COMPLETADO'" @click="ticketActivoWorkspace = ticket" class="bg-linear-to-r from-red-950 to-zinc-900 border border-red-900/40 text-red-400 text-xs font-black px-5 py-2.5 rounded-xl transition cursor-pointer w-full md:w-auto">
                   {{ esAdmin ? '🛡️ Auditar y Dictaminar Folio' : '⏳ Ver Estatus en Revisión' }}
                 </button>
-                <button v-if="ticket.estado === 'APROBADO' || ticket.estado === 'RECHAZADO'" @click="ticketActivoWorkspace = ticket" class="text-xs font-bold tracking-wider uppercase px-4 py-2 rounded-xl border border-dashed border-zinc-800 text-zinc-400 hover:text-zinc-200 cursor-pointer text-center w-full md:w-auto select-none">
-                  🔒 {{ ticket.estado === 'APROBADO' ? 'Liberado (Ver)' : 'Rechazado (Ver)' }}
+                <button v-if="ticket.estado === 'APROBADO'" @click="ticketActivoWorkspace = ticket" class="text-xs font-bold tracking-wider uppercase px-4 py-2 rounded-xl border border-dashed border-zinc-800 text-zinc-400 hover:text-zinc-200 cursor-pointer text-center w-full md:w-auto select-none">
+                  🔒 Liberado (Ver)
                 </button>
+                
+                <!-- Botones para ciclo de rechazo infinito -->
+                <div v-if="ticket.estado === 'RECHAZADO'" class="flex gap-2 w-full md:w-auto">
+                  <button @click="ticketActivoWorkspace = ticket" class="text-xs font-bold tracking-wider uppercase px-4 py-2 rounded-xl border border-dashed border-zinc-800 text-zinc-400 hover:text-zinc-200 cursor-pointer text-center flex-1 md:flex-initial">
+                    👁️ Ver Acta
+                  </button>
+                  <button @click="activarProcesamientoTicket(ticket)" class="bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold px-4 py-2 rounded-xl transition cursor-pointer flex-1 md:flex-initial text-center">
+                    🔄 Reabrir y Corregir
+                  </button>
+                </div>
               </div>
             </div>
           </div>
