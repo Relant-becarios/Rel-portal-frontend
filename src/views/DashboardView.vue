@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import Sidebar from '../components/Sidebar.vue'
 import { useQuery, useMutation } from '@vue/apollo-composable'
 import { gql } from '@apollo/client/core'
@@ -9,12 +9,14 @@ const filtroEstado = ref('TODOS')
 const esModoOscuro = ref(true)
 const comentarioAdmin = ref('')
 const busquedaQuery = ref('')
-const menuMovilAbierto = ref(false) // 🍔 Estado para controlar el menú en celulares
+const menuMovilAbierto = ref(false)
 
 // --- VARIABLES DE NUEVO TICKET ---
 const correoDestinatario = ref('')
 const asuntoTicket = ref('')
 const cuerpoTicket = ref('')
+const archivoAdjuntoBase64 = ref<string | null>(null)
+const fileInputRef = ref<HTMLInputElement | null>(null)
 
 // --- WORKSPACE EN VIVO ---
 const ticketIdActivo = ref<string | null>(null)
@@ -32,6 +34,27 @@ const bitacoraProgresoAcumulada = computed(() => {
   if (!ticket) return []
   return ticket.chat ? ticket.chat.split('\n') : [`[⚙️ Sistema] Esperando primer mensaje de coordinación...`]
 })
+
+// Leer y transformar archivo a Base64 en el formulario del panel
+const manejarSubidaArchivo = (event: Event) => {
+  const target = event.target as HTMLInputElement
+  const file = target.files?.[0]
+  if (!file) {
+    archivoAdjuntoBase64.value = null
+    return
+  }
+  if (file.size > 3 * 1024 * 1024) {
+    alert('⚠️ El archivo supera los 3MB. Por favor sube uno más ligero.')
+    target.value = ''
+    archivoAdjuntoBase64.value = null
+    return
+  }
+  const reader = new FileReader()
+  reader.onload = (e) => {
+    archivoAdjuntoBase64.value = e.target?.result as string
+  }
+  reader.readAsDataURL(file)
+}
 
 // Helper para parsear las fechas de PostgreSQL de forma segura
 const parsearFecha = (fecha: any) => {
@@ -68,6 +91,7 @@ const OBTENER_DATOS_DASHBOARD = gql`
       creadorId
       asignadoId
       chat
+      archivo
       creador {
         email
         nombre
@@ -82,8 +106,8 @@ const OBTENER_DATOS_DASHBOARD = gql`
 const { result, loading, error, refetch } = useQuery(OBTENER_DATOS_DASHBOARD)
 
 const CREAR_TICKET = gql`
-  mutation NuevoTicket($titulo: String!, $descripcion: String!, $asignadoEmail: String) {
-    crearTicket(titulo: $titulo, descripcion: $descripcion, asignadoEmail: $asignadoEmail) { id }
+  mutation NuevoTicket($titulo: String!, $descripcion: String!, $asignadoEmail: String, $archivo: String) {
+    crearTicket(titulo: $titulo, descripcion: $descripcion, asignadoEmail: $asignadoEmail, archivo: $archivo) { id }
   }
 `
 const INICIAR_TRABAJO = gql` mutation Iniciar($ticketId: String!) { iniciarTrabajo(ticketId: $ticketId) { id estado } } `
@@ -127,12 +151,15 @@ const manejarEnviarTicket = async () => {
     await apiCrear({ 
       titulo: asuntoTicket.value, 
       descripcion: cuerpoTicket.value,
-      asignadoEmail: correoDestinatario.value || null
+      asignadoEmail: correoDestinatario.value || null,
+      archivo: archivoAdjuntoBase64.value
     })
-    alert('📧 Requerimiento enrutado y guardado con éxito en PostgreSQL.')
+    alert('📧 Requerimiento enrutado y guardado con éxito.')
     asuntoTicket.value = ''
     cuerpoTicket.value = ''
     correoDestinatario.value = ''
+    archivoAdjuntoBase64.value = null
+    if (fileInputRef.value) fileInputRef.value.value = ''
     refetch()
   } catch (err: any) { alert('Error: ' + err.message) }
 }
@@ -287,6 +314,18 @@ const ejecutarDictamenAdmin = async (aprobado: boolean) => {
                   </p>
                 </div>
 
+                <!-- 📎 RENDERIZAR NATIVAMENTE EL ARCHIVO ADJUNTO EN EL DETALLE -->
+                <div v-if="ticketActivoWorkspace.archivo" class="pt-4 border-t border-zinc-800/60">
+                  <label class="text-[10px] uppercase font-bold text-zinc-500 block mb-2">📎 Documento / Evidencia Adjunta</label>
+                  <div v-if="ticketActivoWorkspace.archivo.startsWith('data:image')" class="rounded-xl overflow-hidden border border-zinc-800 bg-zinc-950/50 flex justify-center p-2">
+                    <img :src="ticketActivoWorkspace.archivo" alt="Evidencia" class="max-w-full max-h-48 object-contain rounded-lg shadow-sm" />
+                  </div>
+                  <a v-else :href="ticketActivoWorkspace.archivo" download="evidencia_adjunta" class="bg-red-950/30 border border-red-900/40 text-red-400 hover:bg-red-900/50 text-xs font-bold px-4 py-3 rounded-xl flex items-center justify-center gap-2 transition-colors w-full">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                    Descargar Archivo Adjunto
+                  </a>
+                </div>
+
                 <div v-if="ticketActivoWorkspace.comentario_admin" class="p-3 sm:p-4 rounded-xl bg-red-950/20 border border-red-900/40">
                   <label class="text-[10px] uppercase font-bold text-red-400 block tracking-wider">⚠️ Comentarios del Dictamen Anterior</label>
                   <p class="text-xs text-zinc-300 italic mt-1">"{{ ticketActivoWorkspace.comentario_admin }}"</p>
@@ -364,6 +403,13 @@ const ejecutarDictamenAdmin = async (aprobado: boolean) => {
               <label class="w-12 sm:w-16 text-xs font-bold text-zinc-400 uppercase">Asunto:</label>
               <input v-model="asuntoTicket" type="text" required :class="esModoOscuro ? 'bg-transparent text-white font-bold' : 'bg-transparent text-slate-900'" class="w-full text-sm focus:outline-hidden" placeholder="Folio o incidencia" />
             </div>
+            
+            <!-- 📎 INPUT DE ARCHIVOS ADJUNTO INLINE -->
+            <div class="flex items-center border-b pb-3 border-zinc-800">
+              <label class="w-12 sm:w-16 text-xs font-bold text-zinc-400 uppercase">Adjunto:</label>
+              <input type="file" ref="fileInputRef" @change="manejarSubidaArchivo" accept="image/*,.pdf,.doc,.docx" class="text-xs text-zinc-400 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-zinc-800 file:text-white hover:file:bg-zinc-700 cursor-pointer w-full" />
+            </div>
+
             <textarea v-model="cuerpoTicket" rows="3" required :class="esModoOscuro ? 'bg-zinc-950 border-zinc-800 text-white' : 'bg-slate-50 border-slate-200'" class="w-full p-3 sm:p-4 text-sm rounded-xl border focus:outline-hidden" placeholder="Especificaciones técnicas..."></textarea>
             <div class="flex justify-end"><button type="submit" class="w-full sm:w-auto bg-red-700 hover:bg-red-800 text-white font-black text-xs uppercase px-6 py-2.5 rounded-xl cursor-pointer">Despachar Ticket</button></div>
           </form>
@@ -459,7 +505,6 @@ const ejecutarDictamenAdmin = async (aprobado: boolean) => {
 .animate-fadeIn {
   animation: fadeIn 0.15s ease-out forwards;
 }
-/* Ocultar barra de scroll en botones de filtro de móviles */
 .scrollbar-none::-webkit-scrollbar {
   display: none;
 }

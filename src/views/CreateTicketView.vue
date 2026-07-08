@@ -12,16 +12,41 @@ const esModoOscuro = ref(true)
 const correoDestinatario = ref('')
 const asuntoTicket = ref('')
 const cuerpoTicket = ref('')
+const archivoAdjuntoBase64 = ref<string | null>(null)
+const fileInputRef = ref<HTMLInputElement | null>(null)
 
-// Mutación limpia sin 'asignadoA' para evitar el error 400 en tu backend actual
+// Procesar el archivo adjunto y pasarlo a texto Base64
+const manejarSubidaArchivo = (event: Event) => {
+  const target = event.target as HTMLInputElement
+  const file = target.files?.[0]
+  if (!file) {
+    archivoAdjuntoBase64.value = null
+    return
+  }
+
+  // 🔒 Validación: Máximo 3MB por archivo
+  if (file.size > 3 * 1024 * 1024) {
+    alert('⚠️ El archivo supera el límite de 3MB. Por favor sube una captura o documento más ligero.')
+    target.value = ''
+    archivoAdjuntoBase64.value = null
+    return
+  }
+
+  const reader = new FileReader()
+  reader.onload = (e) => {
+    archivoAdjuntoBase64.value = e.target?.result as string
+  }
+  reader.readAsDataURL(file)
+}
+
+// Mutación actualizada con soporte para destinatario y archivo adjunto
 const CREAR_TICKET_MUTATION = gql`
-  mutation NuevoTicket($titulo: String!, $descripcion: String!) {
-    crearTicket(titulo: $titulo, descripcion: $descripcion) { 
+  mutation NuevoTicket($titulo: String!, $descripcion: String!, $asignadoEmail: String, $archivo: String) {
+    crearTicket(titulo: $titulo, descripcion: $descripcion, asignadoEmail: $asignadoEmail, archivo: $archivo) { 
       id 
     }
   }
 `
-// Desestructuramos como 'crearTicket' para resolver el error de la línea 27
 const { mutate: crearTicket } = useMutation(CREAR_TICKET_MUTATION)
 
 const manejarEnviarTicket = async () => {
@@ -29,12 +54,12 @@ const manejarEnviarTicket = async () => {
   try {
     await crearTicket({ 
       titulo: asuntoTicket.value, 
-      descripcion: cuerpoTicket.value
+      descripcion: cuerpoTicket.value,
+      asignadoEmail: correoDestinatario.value || null,
+      archivo: archivoAdjuntoBase64.value
     })
     
-    alert('📧 Requerimiento generado y despachado con éxito a la Mesa General.')
-    
-    // Al ser una vista externa, usamos el router para regresar al panel general (aquí no se usa refetch)
+    alert('📧 Requerimiento generado y despachado con éxito.')
     router.push('/tickets')
   } catch (err: any) {
     alert('Error al despachar requerimiento: ' + err.message)
@@ -68,9 +93,9 @@ const manejarEnviarTicket = async () => {
           <form @submit.prevent="manejarEnviarTicket" class="p-6 space-y-4">
             <div class="flex items-center border-b pb-2" :class="esModoOscuro ? 'border-zinc-800' : 'border-slate-100'">
               <label class="w-16 text-xs font-bold text-slate-400 uppercase tracking-wider">Para:</label>
-              <input v-model="correoDestinatario" type="email" 
+              <input v-model="correoDestinatario" type="text" 
                      :class="esModoOscuro ? 'bg-transparent text-white placeholder-zinc-600' : 'bg-transparent text-slate-900'" 
-                     class="w-full text-sm focus:outline-hidden" placeholder="empleado@relant.com (O dejas vacío para Mesa General)" />
+                     class="w-full text-sm focus:outline-hidden" placeholder="empleado@relant.com o Nombre (O vacío para Mesa General)" />
             </div>
 
             <div class="flex items-center border-b pb-2" :class="esModoOscuro ? 'border-zinc-800' : 'border-slate-100'">
@@ -80,8 +105,15 @@ const manejarEnviarTicket = async () => {
                      class="w-full text-sm font-bold focus:outline-hidden" placeholder="Título o asunto de la incidencia" />
             </div>
 
+            <!-- 📎 NUEVA SECCIÓN DE ARCHIVO ADJUNTO -->
+            <div class="flex items-center border-b pb-3" :class="esModoOscuro ? 'border-zinc-800' : 'border-slate-100'">
+              <label class="w-16 text-xs font-bold text-slate-400 uppercase tracking-wider">Adjunto:</label>
+              <input type="file" ref="fileInputRef" @change="manejarSubidaArchivo" accept="image/*,.pdf,.doc,.docx" 
+                     class="text-xs text-zinc-400 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-zinc-800 file:text-white hover:file:bg-zinc-700 cursor-pointer w-full" />
+            </div>
+
             <div class="pt-2">
-              <textarea v-model="cuerpoTicket" rows="10" required
+              <textarea v-model="cuerpoTicket" rows="8" required
                         :class="esModoOscuro ? 'bg-zinc-950 border-zinc-800 text-white placeholder-zinc-600' : 'bg-slate-50 border-slate-200'" 
                         class="w-full p-4 text-sm rounded-xl border focus:outline-hidden focus:border-red-900/50 transition leading-relaxed" 
                         placeholder="Escribe aquí las especificaciones del requerimiento técnico..."></textarea>
