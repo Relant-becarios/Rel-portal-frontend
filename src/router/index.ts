@@ -40,6 +40,13 @@ const routes = [
     name: 'Login',
     component: () => import('../views/LoginView.vue'),
     meta: { requiereInvitado: true }
+  },
+  // 🔒 NUEVA RUTA DE SEGURIDAD PROTEGIDA
+  {
+    path: '/forgot-password',
+    name: 'ForgotPassword',
+    component: () => import('../views/ForgotPasswordView.vue'),
+    meta: { requiereInvitado: true }
   }
 ]
 
