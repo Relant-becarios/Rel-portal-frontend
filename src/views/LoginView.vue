@@ -6,38 +6,38 @@ import { useMutation } from '@vue/apollo-composable' // <-- CORREGIDO: Se elimin
 import { gql } from '@apollo/client/core'
 import { useRouter } from 'vue-router'
 
-const router = useRouter()
-const esLogin = ref(true)
-const email = ref('')
-const password = ref('')
-const nombre = ref('')
-const rol = ref('EMPLEADO')
+const router = useRouter() //[cite: 8]
+const esLogin = ref(true) //[cite: 8]
+const email = ref('') //[cite: 8]
+const password = ref('') //[cite: 8]
+const nombre = ref('') //[cite: 8]
+const rol = ref('EMPLEADO') //[cite: 8]
 
 const REGISTRAR_USUARIO_MUTATION = gql`
   mutation NuevoUsuario($nombre: String!, $rol: Role!) {
     registrarUsuario(nombre: $nombre, rol: $rol) { id }
   }
-`
-const { mutate: registrarEnPostgres } = useMutation(REGISTRAR_USUARIO_MUTATION)
+` //[cite: 8]
+const { mutate: registrarEnPostgres } = useMutation(REGISTRAR_USUARIO_MUTATION) //[cite: 8]
 
 const manejarLogin = async () => {
   try {
-    await signInWithEmailAndPassword(auth, email.value, password.value)
-    router.push('/home')
+    await signInWithEmailAndPassword(auth, email.value, password.value) //[cite: 8]
+    router.push('/home') //[cite: 8]
   } catch (err: any) {
-    alert('Error al autenticar: ' + err.message)
+    alert('Error al autenticar: ' + err.message) //[cite: 8]
   }
 }
 
 const manejarRegistro = async () => {
-  if (!nombre.value || !email.value || !password.value) return
+  if (!nombre.value || !email.value || !password.value) return //[cite: 8]
   try {
-    await createUserWithEmailAndPassword(auth, email.value, password.value)
-    await registrarEnPostgres({ nombre: nombre.value, rol: rol.value })
-    alert('¡Cuenta de empleado creada con éxito!')
-    esLogin.value = true
+    await createUserWithEmailAndPassword(auth, email.value, password.value) //[cite: 8]
+    await registrarEnPostgres({ nombre: nombre.value, rol: rol.value }) //[cite: 8]
+    alert('¡Cuenta de empleado creada con éxito!') //[cite: 8]
+    esLogin.value = true //[cite: 8]
   } catch (err: any) {
-    alert('Error en el registro: ' + err.message)
+    alert('Error en el registro: ' + err.message) //[cite: 8]
   }
 }
 </script>
@@ -61,6 +61,13 @@ const manejarRegistro = async () => {
         <div>
           <label class="block text-[10px] font-black text-slate-500 uppercase tracking-widest">Clave de Acceso</label>
           <input v-model="password" type="password" required class="mt-2 block w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 text-sm focus:outline-hidden focus:border-indigo-600 transition-all" placeholder="••••••••" />
+          
+          <!-- 🔗 NUEVO ENLACE ADICIONADO ABAJO DE LA CONTRASEÑA -->
+          <div class="mt-2 text-right">
+            <router-link to="/forgot-password" class="text-xs font-bold text-indigo-600 hover:underline">
+              ¿Olvidaste tu contraseña?
+            </router-link>
+          </div>
         </div>
         <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs uppercase tracking-wider py-3.5 rounded-xl transition shadow-lg shadow-indigo-600/10 cursor-pointer">
           Autenticar e Ingresar

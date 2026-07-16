@@ -18,6 +18,10 @@ const cuerpoTicket = ref('')
 const archivoAdjuntoBase64 = ref<string | null>(null)
 const fileInputRef = ref<HTMLInputElement | null>(null)
 
+// --- VARIABLES DEL FILTRO DE REPORTES EXCEL ---
+const fechaInicioReporte = ref('')
+const fechaFinReporte = ref('')
+
 // --- WORKSPACE EN VIVO ---
 const ticketIdActivo = ref<string | null>(null)
 const notaProgresoActual = ref('')
@@ -79,6 +83,112 @@ onMounted(() => {
 const toggleTema = () => {
   esModoOscuro.value = !esModoOscuro.value
   localStorage.setItem('relant_theme', esModoOscuro.value ? 'oscuro' : 'claro')
+}
+
+// --- 📊 LÓGICA DE EXPORTACIÓN NATIVA A MICROSOFT EXCEL ---
+const descargarReporteExcel = () => {
+  if (!fechaInicioReporte.value || !fechaFinReporte.value) {
+    alert('❌ Por favor, seleccione el rango completo de fechas (Inicio y Fin).')
+    return
+  }
+
+  const tickets = result.value?.misTickets || []
+  const miIdPrisma = result.value?.me?.id || ''
+  const soyAdmin = esAdmin.value
+
+  // 1. Filtrar respetando la privacidad operacional de tu empresa
+  let baseTickets = [...tickets]
+  if (!soyAdmin) {
+    baseTickets = baseTickets.filter((t: any) => t.asignadoId === miIdPrisma || t.creadorId === miIdPrisma)
+  }
+
+  // 2. Formatear las fechas límite del input HTML
+  const inicioDate = new Date(fechaInicioReporte.value + 'T00:00:00')
+  const finDate = new Date(fechaFinReporte.value + 'T23:59:59')
+
+  // 3. Filtrar los requerimientos dentro del rango temporal seleccionado
+  const filtradosPorFecha = baseTickets.filter((t: any) => {
+    const fechaTicket = parsearFecha(t.fecha_recibido)
+    return fechaTicket && fechaTicket >= inicioDate && fechaTicket <= finDate
+  })
+
+  if (filtradosPorFecha.length === 0) {
+    alert('⚠️ No se encontraron requerimientos registrados dentro del rango de fechas seleccionado.')
+    return
+  }
+
+  // 4. Diseñar plantilla XML/HTML que Excel interpreta de forma nativa e impecable con UTF-8
+  let tablaHtml = `
+    <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
+    <head>
+      <!-- 🔒 EL CANDADO MÁGICO: Esto le prohíbe a Excel romper tus letras -->
+      <meta charset="utf-8" />
+      <style>
+        th { background-color: #b91c1c; color: #ffffff; font-weight: bold; text-align: center; }
+        td, th { border: 1px solid #cbd5e1; padding: 6px 12px; font-family: sans-serif; font-size: 11px; }
+      </style>
+    </head>
+    <body>
+      <table>
+        <thead>
+          <tr>
+            <th>ID Folio</th>
+            <th>Título</th>
+            <th>Descripción</th>
+            <th>Estado Actual</th>
+            <th>Fecha de Recibido</th>
+            <th>Creador del Ticket</th>
+            <th>Operador Asignado</th>
+            <th>Comentario de Dictamen</th>
+          </tr>
+        </thead>
+        <tbody>
+  `
+
+  // 5. Inyectar filas dinámicas limpiando caracteres conflictivos
+  filtradosPorFecha.forEach((t: any) => {
+    const folio = 'RLN-' + t.id.substring(0, 6).toUpperCase()
+    const titulo = t.titulo || ''
+    const descripcion = t.descripcion || ''
+    const estado = t.estado || ''
+    const fecha = parsearFecha(t.fecha_recibido)?.toLocaleString() || ''
+    const creador = t.creador?.nombre || t.creador?.email || 'Mesa Central'
+    const asignado = t.asignado?.nombre || t.asignado?.email || 'Sin Asignar'
+    const dictamen = t.comentario_admin || 'Sin comentarios registrados'
+
+    tablaHtml += `
+      <tr>
+        <td>${folio}</td>
+        <td>${titulo}</td>
+        <td>${descripcion}</td>
+        <td>${estado}</td>
+        <td>${fecha}</td>
+        <td>${creador}</td>
+        <td>${asignado}</td>
+        <td>${dictamen}</td>
+      </tr>
+    `
+  })
+
+  tablaHtml += `
+        </tbody>
+      </table>
+    </body>
+    </html>
+  `
+
+  // 6. Configurar tipo de archivo binario compatible con Microsoft Excel
+  const blob = new Blob([tablaHtml], { type: 'application/vnd.ms-excel;charset=utf-8;' })
+  const enlaceDescarga = document.createElement('a')
+  const urlArchivo = URL.createObjectURL(blob)
+
+  enlaceDescarga.setAttribute('href', urlArchivo)
+  enlaceDescarga.setAttribute('download', `Reporte_Relant_Tickets_${fechaInicioReporte.value}_a_${fechaFinReporte.value}.xls`)
+  enlaceDescarga.style.visibility = 'hidden'
+  
+  document.body.appendChild(enlaceDescarga)
+  enlaceDescarga.click()
+  document.body.removeChild(enlaceDescarga)
 }
 
 // --- 🔒 GRAPHQL API CENTRAL ---
@@ -356,7 +466,7 @@ const ejecutarDictamenAdmin = async (aprobado: boolean) => {
 
                 <div v-if="ticketActivoWorkspace.estado === 'TRABAJANDO'" :class="esModoOscuro ? 'border-zinc-800' : 'border-slate-200'" class="space-y-3 pt-2 border-t shrink-0">
                   <div class="flex gap-2">
-                    <input v-model="notaProgresoActual" @keyup.enter="registrarProgresoEnCaliente" type="text" placeholder="Escribe un avance o mensaje..." :class="esModoOscuro ? 'bg-zinc-900 border-zinc-800 text-white placeholder-zinc-500' : 'bg-white border-slate-200 text-slate-800 placeholder-slate-400'" class="rounded-xl px-3 py-2 text-xs flex-1 focus:outline-hidden focus:border-red-700 min-w-0" />
+                    <input v-model="notaProgresoActual" @keyup.enter="registrarProgresoEnCaliente" type="text" placeholder="Escribe un avance o message..." :class="esModoOscuro ? 'bg-zinc-900 border-zinc-800 text-white placeholder-zinc-500' : 'bg-white border-slate-200 text-slate-800 placeholder-slate-400'" class="rounded-xl px-3 py-2 text-xs flex-1 focus:outline-hidden focus:border-red-700 min-w-0" />
                     <button @click="registrarProgresoEnCaliente" class="bg-zinc-800 hover:bg-zinc-700 text-white font-bold text-xs px-3 py-2 rounded-xl cursor-pointer shrink-0">➕ Log</button>
                   </div>
                   <button @click="despacharAuditoriaAdmin" class="w-full bg-red-700 hover:bg-red-800 text-white font-black text-xs uppercase tracking-widest py-2.5 sm:py-3 rounded-xl shadow-md transition cursor-pointer">
@@ -399,6 +509,31 @@ const ejecutarDictamenAdmin = async (aprobado: boolean) => {
           <div :class="esModoOscuro ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-slate-200'" class="p-4 rounded-2xl border flex items-center justify-between sm:col-span-2 lg:col-span-1">
             <p class="text-[10px] sm:text-xs font-bold text-zinc-400 uppercase tracking-wider">⚡ Canal Activo</p>
             <span class="text-[10px] font-mono text-zinc-500">PostgreSQL + SSL</span>
+          </div>
+        </div>
+
+        <!-- 📊 NUEVA SECCIÓN: EXTRACTOR DE REPORTES DE TICKETS A MICROSOFT EXCEL -->
+        <div :class="esModoOscuro ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-slate-200'" class="w-full rounded-2xl border shadow-md overflow-hidden transition-colors text-left">
+          <div :class="esModoOscuro ? 'border-zinc-800 bg-zinc-950/40' : 'border-slate-200 bg-slate-50/50'" class="p-3 sm:p-4 border-b flex items-center justify-between">
+            <h3 class="text-xs font-black tracking-wider uppercase flex items-center space-x-2">
+              <span>📊 Exportar Reporte Operacional</span>
+            </h3>
+            <span class="text-[10px] font-mono text-zinc-500">Relant Data Protocol</span>
+          </div>
+          <div class="p-4 sm:p-6 grid grid-cols-1 sm:grid-cols-3 gap-4 items-end">
+            <div class="flex flex-col space-y-1">
+              <label class="text-[10px] font-black text-zinc-400 uppercase tracking-wider">Fecha de Inicio:</label>
+              <input v-model="fechaInicioReporte" type="date" :class="esModoOscuro ? 'bg-zinc-950 border-zinc-800 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'" class="p-2.5 text-xs rounded-xl border focus:outline-hidden" />
+            </div>
+            <div class="flex flex-col space-y-1">
+              <label class="text-[10px] font-black text-zinc-400 uppercase tracking-wider">Fecha de Fin:</label>
+              <input v-model="fechaFinReporte" type="date" :class="esModoOscuro ? 'bg-zinc-950 border-zinc-800 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'" class="p-2.5 text-xs rounded-xl border focus:outline-hidden" />
+            </div>
+            <div>
+              <button @click="descargarReporteExcel" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs uppercase tracking-widest py-3 rounded-xl cursor-pointer transition shadow-md shadow-emerald-600/10">
+                📥 Descargar Excel de Tablas
+              </button>
+            </div>
           </div>
         </div>
 
@@ -470,7 +605,6 @@ const ejecutarDictamenAdmin = async (aprobado: boolean) => {
                   {{ ticket.descripcion }}
                 </p>
                 
-                <!-- 👉 ADAPTACIÓN PERFECTA A TEMA CLARO DEL COMENTARIO ADMIN (No más parches negros) -->
                 <div v-if="ticket.comentario_admin" :class="esModoOscuro ? 'bg-zinc-950 border-zinc-800' : 'bg-red-50/50 border-red-200 text-slate-800'" class="mt-3 p-3 rounded-xl border text-xs w-full max-w-2xl">
                   <span :class="esModoOscuro ? 'text-red-400' : 'text-red-600'" class="font-bold block mb-0.5">💬 Justificación de Administración:</span>
                   <p :class="esModoOscuro ? 'text-zinc-300' : 'text-slate-700'" class="italic wrap-break-word">"{{ ticket.comentario_admin }}"</p>
