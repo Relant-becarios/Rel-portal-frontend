@@ -139,13 +139,56 @@ const toggleTema = () => {
   localStorage.setItem('relant_theme', esModoOscuro.value ? 'oscuro' : 'claro')
 }
 
-// --- 📊 EXPORTACIÓN A EXCEL ---
-const descargarReporteExcel = () => {
-  if (!fechaInicioReporte.value || !fechaFinReporte.value) {
-    alert('❌ Por favor, seleccione el rango completo de fechas (Inicio y Fin).')
-    return
-  }
+// Helper para convertir fechas YYYY-MM-DD a formato visual DD/MM/YYYY
+const formatearFechaVisual = (fechaStr: string) => {
+  if (!fechaStr) return ''
+  const partes = fechaStr.split('-')
+  if (partes.length === 3) return `${partes[2]}/${partes[1]}/${partes[0]}`
+  return fechaStr
+}
 
+// --- 🔒 GRAPHQL API CENTRAL ---
+const OBTENER_DATOS_DASHBOARD = gql`
+  query GetDashboardData {
+    me { id nombre email rol }
+    todosUsuarios { id nombre email }
+    misTickets {
+      id titulo descripcion estado comentario_admin fecha_recibido fecha_trabajando fecha_completado fecha_evaluacion creadorId asignadoId chat archivo prioridad proyecto
+      creador { email nombre }
+      asignado { email nombre }
+    }
+  }
+`
+const { result, loading, error, refetch } = useQuery<{ me: any, todosUsuarios: Usuario[], misTickets: any[] }>(OBTENER_DATOS_DASHBOARD)
+
+const CREAR_TICKET = gql`
+  mutation NuevoTicket($titulo: String!, $descripcion: String!, $asignadoEmail: String, $archivo: String, $prioridad: String, $proyecto: String) {
+    crearTicket(titulo: $titulo, descripcion: $descripcion, asignadoEmail: $asignadoEmail, archivo: $archivo, prioridad: $prioridad, proyecto: $proyecto) { id }
+  }
+`
+const INICIAR_TRABAJO = gql` mutation Iniciar($ticketId: String!) { iniciarTrabajo(ticketId: $ticketId) { id estado } } `
+const COMPLETAR_TRABAJO = gql` mutation Completar($ticketId: String!, $notas: String) { completarTrabajo(ticketId: $ticketId, notas: $notas) { id estado } } `
+const EVALUAR_TICKET = gql`
+  mutation Evaluar($ticketId: String!, $aprobado: Boolean!, $comentario: String!) {
+    evaluarTicket(ticketId: $ticketId, aprobado: $aprobado, comentario: $comentario) { id estado }
+  }
+`
+const ENVIAR_MENSAJE_CHAT = gql`
+  mutation EnviarMensaje($ticketId: String!, $texto: String!) {
+    enviarMensajeChat(ticketId: $ticketId, texto: $texto) { id chat }
+  }
+`
+
+const { mutate: apiCrear } = useMutation(CREAR_TICKET)
+const { mutate: apiIniciar } = useMutation(INICIAR_TRABAJO)
+const { mutate: apiCompletar } = useMutation(COMPLETAR_TRABAJO)
+const { mutate: apiEvaluar } = useMutation(EVALUAR_TICKET)
+const { mutate: apiChat } = useMutation(ENVIAR_MENSAJE_CHAT)
+
+const esAdmin = computed(() => result.value?.me?.rol === 'ADMIN')
+
+// Lógica de filtrado común para reportes
+const obtenerTicketsFiltradosReporte = () => {
   const tickets = result.value?.misTickets || []
   const miIdPrisma = result.value?.me?.id || ''
   const soyAdmin = esAdmin.value
@@ -158,10 +201,20 @@ const descargarReporteExcel = () => {
   const inicioDate = new Date(fechaInicioReporte.value + 'T00:00:00')
   const finDate = new Date(fechaFinReporte.value + 'T23:59:59')
 
-  const filtradosPorFecha = baseTickets.filter((t: any) => {
+  return baseTickets.filter((t: any) => {
     const fechaTicket = parsearFecha(t.fecha_recibido)
     return fechaTicket && fechaTicket >= inicioDate && fechaTicket <= finDate
   })
+}
+
+// --- 📊 EXPORTACIÓN A EXCEL ---
+const descargarReporteExcel = () => {
+  if (!fechaInicioReporte.value || !fechaFinReporte.value) {
+    alert('❌ Por favor, seleccione el rango completo de fechas (Inicio y Fin).')
+    return
+  }
+
+  const filtradosPorFecha = obtenerTicketsFiltradosReporte()
 
   if (filtradosPorFecha.length === 0) {
     alert('⚠️ No se encontraron requerimientos registrados dentro del rango de fechas seleccionado.')
@@ -225,47 +278,205 @@ const descargarReporteExcel = () => {
   document.body.removeChild(enlaceDescarga)
 }
 
-// --- 🔒 GRAPHQL API CENTRAL ---
-const OBTENER_DATOS_DASHBOARD = gql`
-  query GetDashboardData {
-    me { id nombre email rol }
-    todosUsuarios { id nombre email }
-    misTickets {
-      id titulo descripcion estado comentario_admin fecha_recibido fecha_trabajando fecha_completado fecha_evaluacion creadorId asignadoId chat archivo prioridad proyecto
-      creador { email nombre }
-      asignado { email nombre }
-    }
+// --- 📄 NUEVA FUNCIÓN: EXPORTACIÓN NATAL A COMPILACIÓN PDF ---
+const descargarReportePdf = () => {
+  if (!fechaInicioReporte.value || !fechaFinReporte.value) {
+    alert('❌ Por favor, seleccione el rango completo de fechas (Inicio y Fin).')
+    return
   }
-`
-const { result, loading, error, refetch } = useQuery<{ me: any, todosUsuarios: Usuario[], misTickets: any[] }>(OBTENER_DATOS_DASHBOARD)
 
-const CREAR_TICKET = gql`
-  mutation NuevoTicket($titulo: String!, $descripcion: String!, $asignadoEmail: String, $archivo: String, $prioridad: String, $proyecto: String) {
-    crearTicket(titulo: $titulo, descripcion: $descripcion, asignadoEmail: $asignadoEmail, archivo: $archivo, prioridad: $prioridad, proyecto: $proyecto) { id }
+  const filtradosPorFecha = obtenerTicketsFiltradosReporte()
+
+  if (filtradosPorFecha.length === 0) {
+    alert('⚠️ No se encontraron requerimientos registrados dentro del rango de fechas seleccionado.')
+    return
   }
-`
-const INICIAR_TRABAJO = gql` mutation Iniciar($ticketId: String!) { iniciarTrabajo(ticketId: $ticketId) { id estado } } `
-const COMPLETAR_TRABAJO = gql` mutation Completar($ticketId: String!, $notas: String) { completarTrabajo(ticketId: $ticketId, notas: $notas) { id estado } } `
-const EVALUAR_TICKET = gql`
-  mutation Evaluar($ticketId: String!, $aprobado: Boolean!, $comentario: String!) {
-    evaluarTicket(ticketId: $ticketId, aprobado: $aprobado, comentario: $comentario) { id estado }
+
+  const periodoVisual = `${formatearFechaVisual(fechaInicioReporte.value)} – ${formatearFechaVisual(fechaFinReporte.value)}`
+  const hoyVisual = new Date().toLocaleDateString('es-MX')
+
+  // Construcción de la estructura HTML dinámica bajo el formato exacto solicitado
+  let itemsHtml = ''
+  filtradosPorFecha.forEach((t: any, index: number) => {
+    const folio = 'RLN-' + t.id.substring(0, 6).toUpperCase()
+    const fechaTicket = parsearFecha(t.fecha_recibido)?.toLocaleString() || ''
+    const creador = t.creador?.nombre || t.creador?.email || 'Mesa Central'
+    const operador = t.asignado?.nombre || t.asignado?.email || 'Sin Asignar'
+    const estado = t.estado || 'RECIBIDO'
+    
+    let badgeClass = 'status-pendiente'
+    if (estado === 'APROBADO') badgeClass = 'status-aprobado'
+    else if (estado === 'RECHAZADO') badgeClass = 'status-rechazado'
+    else if (estado === 'TRABAJANDO') badgeClass = 'status-proceso'
+
+    itemsHtml += `
+      <div class="ticket-item">
+        <table class="ticket-top">
+          <tr>
+            <td class="ticket-num">${index + 1}</td>
+            <td class="ticket-id">${folio}</td>
+            <td class="ticket-fecha">${fechaTicket}</td>
+            <td class="ticket-creador">${creador}</td>
+            <td class="ticket-operador">${operador}</td>
+            <td class="ticket-estado"><span class="status-badge ${badgeClass}">${estado}</span></td>
+          </tr>
+        </table>
+        <div class="ticket-title">${t.titulo || 'Sin Asunto'}</div>
+        <div class="note-block">
+          <span class="note-label">Comentario de dictamen</span>
+          <div class="note-value">${t.comentario_admin || 'Sin comentarios registrados'}</div>
+        </div>
+        <div class="desc-box">
+          <span class="note-label">Descripción / Avance del ticket</span>
+          <pre>${t.descripcion || ''}</pre>
+        </div>
+        <hr class="item-divider">
+      </div>
+    `
+  })
+
+  const htmlCompleto = `
+    <!DOCTYPE html>
+    <html lang="es">
+    <head>
+    <meta charset="utf-8">
+    <style>
+      * { box-sizing: border-box; }
+      body { font-family: Arial, Helvetica, sans-serif; color: #1a1a1a; margin: 0; padding: 0; font-size: 12px; }
+      .page { padding: 42px 46px 30px 46px; }
+      .header-table { width: 100%; border-collapse: collapse; }
+      .header-table td { vertical-align: top; }
+      .header-left { width: 56%; }
+      .header-right { width: 44%; text-align: right; }
+      .logo-img { height: 40px; width: auto; display: block; margin-bottom: 4px; }
+      .tagline { font-size: 9px; color: #9a9a9a; margin-top: 2px; margin-bottom: 14px; }
+      .address { font-size: 11px; color: #222; line-height: 1.5; margin-bottom: 8px; }
+      .doc-original { font-size: 11px; font-weight: 700; color: #333; margin-bottom: 4px; }
+      .doc-title { font-size: 17px; font-weight: 800; color: #111; border-right: 4px solid #f2a63a; padding-right: 8px; display: inline-block; margin-bottom: 10px; }
+      .meta-table { width: 100%; border-collapse: collapse; margin-top: 6px; }
+      .meta-table td { font-size: 10.5px; padding: 4px 0 2px 10px; vertical-align: top; border-top: 1px dotted #b9c2cc; text-align: left; }
+      .meta-label { color: #9a9a9a; display: block; }
+      .meta-value { font-weight: 700; color: #111; display: block; margin-top: 2px; }
+      .full-divider { border: none; border-top: 1px dotted #b9c2cc; margin: 16px 0 14px 0; }
+      .section-title { font-size: 13px; font-weight: 800; color: #111; border-left: 4px solid #f2a63a; padding-left: 8px; margin-bottom: 4px; }
+      .section-underline { border: none; border-top: 2px solid #2f9ae0; width: 55%; margin: 0 0 10px 0; }
+      .table-header { width: 100%; border-collapse: collapse; background: #f2f4f6; font-size: 10px; color: #6b7280; font-weight: 700; margin-bottom: 4px; }
+      .table-header td { padding: 6px 10px; text-align: left; }
+      .col-folio { width: 12%; } .col-titulo { width: 20%; } .col-fecha { width: 16%; } .col-creador { width: 16%; } .col-operador { width: 20%; } .col-estado { width: 16%; text-align: right !important; }
+      .ticket-item { padding: 10px 10px 4px 10px; page-break-inside: avoid; }
+      .ticket-top { width: 100%; border-collapse: collapse; }
+      .ticket-top td { vertical-align: middle; padding: 2px 4px 2px 0; }
+      .ticket-num { font-size: 11px; color: #9a9a9a; width: 12%; }
+      .ticket-id { font-weight: 800; font-size: 12px; color: #111; width: 20%; }
+      .ticket-fecha { width: 16%; font-size: 10.5px; color: #333; }
+      .ticket-creador { width: 16%; font-size: 10.5px; color: #333; }
+      .ticket-operador { width: 20%; font-size: 10.5px; color: #333; }
+      .ticket-estado { width: 16%; text-align: right; }
+      .status-badge { display: inline-block; font-size: 9.5px; font-weight: 800; padding: 3px 8px; border-radius: 3px; letter-spacing: .3px; }
+      .status-aprobado { background: #e3f6e8; color: #1e8a3c; }
+      .status-pendiente { background: #fdecdc; color: #b8600f; }
+      .status-rechazado { background: #fbe2e2; color: #c02626; }
+      .status-proceso { background: #e2ecfb; color: #1d5fc0; }
+      .ticket-title { font-weight: 800; font-size: 12px; color: #111; margin: 8px 0 6px 0; text-transform: uppercase; }
+      .note-block { display: inline-block; width: 48%; vertical-align: top; margin-bottom: 6px; }
+      .note-label { font-size: 9.5px; color: #9a9a9a; display: block; }
+      .note-value { font-size: 10.5px; color: #222; margin-top: 2px; }
+      .desc-box { background: #fafbfc; border: 1px solid #e5e9ee; border-radius: 3px; padding: 8px 10px; margin: 4px 0 10px 0; }
+      .desc-box pre { font-family: Arial, Helvetica, sans-serif; font-size: 9.8px; color: #444; white-space: pre-wrap; word-wrap: break-word; margin: 4px 0 0 0; line-height: 1.5; }
+      .item-divider { border: none; border-top: 1px solid #2f9ae0; margin: 0 0 4px 0; }
+      .footer-note { margin-top: 26px; padding-top: 10px; border-top: 2px solid #2f9ae0; font-size: 9px; color: #9a9a9a; text-align: center; }
+    </style>
+    </head>
+    <body>
+    <div class="page">
+      <table class="header-table">
+        <tr>
+          <td class="header-left">
+            <h2 style="margin:0; font-size:24px; font-weight:900; color:#b91c1c; letter-spacing:-0.5px;">Relant</h2>
+            <div class="tagline">Fluid dosing: The simplicity of an innovative solution</div>
+            <div class="address">La luna 2733 Jardines del Bosque Centro,<br>Guadalajara, Jalisco, 44520</div>
+          </td>
+          <td class="header-right">
+            <div class="doc-original">Documento Interno</div>
+            <div class="doc-title">Reporte de Tickets</div>
+            <table class="meta-table">
+              <tr>
+                <td style="border-top:none;">
+                  <span class="meta-label">Periodo del reporte</span>
+                  <span class="meta-value">${periodoVisual}</span>
+                </td>
+                <td style="border-top:none;">
+                  <span class="meta-label">Fecha de generación</span>
+                  <span class="meta-value">${hoyVisual}</span>
+                </td>
+                <td style="border-top:none;">
+                  <span class="meta-label">Página</span>
+                  <span class="meta-value">1/1</span>
+                </td>
+              </tr>
+            </table>
+            <table class="meta-table">
+              <tr>
+                <td>
+                  <span class="meta-label">Total de tickets</span>
+                  <span class="meta-value">${filtradosPorFecha.length}</span>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+      </table>
+
+      <hr class="full-divider">
+      <div class="section-title">Detalle de Tickets</div>
+      <hr class="section-underline">
+
+      <table class="table-header">
+        <tr>
+          <td class="col-folio">ID Folio</td>
+          <td class="col-titulo">Título</td>
+          <td class="col-fecha">Fecha de recibido</td>
+          <td class="col-creador">Creador</td>
+          <td class="col-operador">Operador asignado</td>
+          <td class="col-estado">Estado</td>
+        </tr>
+      </table>
+
+      ${itemsHtml}
+
+      <div class="footer-note">
+        Reporte generado a partir de Reporte_Relant_Tickets_${fechaInicioReporte.value}_a_${fechaFinReporte.value} &middot; Documento de uso interno
+      </div>
+    </div>
+    </body>
+    </html>
+  `
+
+  // Inyección mediante Iframe invisible para disparar el motor nativo de guardado PDF
+  const iframe = document.createElement('iframe')
+  iframe.style.position = 'fixed'
+  iframe.style.right = '0'
+  iframe.style.bottom = '0'
+  iframe.style.width = '0'
+  iframe.style.height = '0'
+  iframe.style.border = '0'
+  document.body.appendChild(iframe)
+
+  const doc = iframe.contentWindow?.document
+  if (doc) {
+    doc.open()
+    doc.write(htmlCompleto)
+    doc.close()
   }
-`
-const ENVIAR_MENSAJE_CHAT = gql`
-  mutation EnviarMensaje($ticketId: String!, $texto: String!) {
-    enviarMensajeChat(ticketId: $ticketId, texto: $texto) { id chat }
-  }
-`
 
-const { mutate: apiCrear } = useMutation(CREAR_TICKET)
-const { mutate: apiIniciar } = useMutation(INICIAR_TRABAJO)
-const { mutate: apiCompletar } = useMutation(COMPLETAR_TRABAJO)
-const { mutate: apiEvaluar } = useMutation(EVALUAR_TICKET)
-const { mutate: apiChat } = useMutation(ENVIAR_MENSAJE_CHAT)
+  setTimeout(() => {
+    iframe.contentWindow?.focus()
+    iframe.contentWindow?.print()
+    document.body.removeChild(iframe)
+  }, 500)
+}
 
-const esAdmin = computed(() => result.value?.me?.rol === 'ADMIN')
-
-// --- ⏱️ FUNCIÓN DE TIEMPOS SLA (¡CORREGIDA VARIABLE SEMANAS!) ---
+// --- ⏱️ FUNCIÓN DE TIEMPOS SLA ---
 const convertirMinutosATexto = (totalMinutos: number): string => {
   if (totalMinutos <= 0) return "0 min"
   const MINUTOS_ANIO = 365 * 24 * 60
@@ -281,11 +492,8 @@ const convertirMinutosATexto = (totalMinutos: number): string => {
   if (anios > 0) { partes.push(`${anios} ${anios === 1 ? 'año' : 'años'}`); restante %= MINUTOS_ANIO; }
   const meses = Math.floor(restante / MINUTOS_MES)
   if (meses > 0) { partes.push(`${meses} ${meses === 1 ? 'mes' : 'meses'}`); restante %= MINUTOS_MES; }
-  
-  // ⚡ SE CORRIGIÓ EL LLAMADO PASANDO WEEKS A SEMANAS
   const semanas = Math.floor(restante / MINUTOS_SEMANA)
   if (semanas > 0) { partes.push(`${semanas} ${semanas === 1 ? 'semana' : 'semanas'}`); restante %= MINUTOS_SEMANA; }
-  
   const dias = Math.floor(restante / MINUTOS_DIA)
   if (dias > 0) { partes.push(`${dias} ${dias === 1 ? 'día' : 'días'}`); restante %= MINUTOS_DIA; }
   const horas = Math.floor(restante / MINUTOS_HORA)
@@ -311,6 +519,29 @@ const formatearTiempoSLA = (ticket: any) => {
   
   const tiempoLegible = convertirMinutosATexto(minutosTotales)
   return ticket.fecha_completado ? `⏱️ Resuelto en: ${tiempoLegible}` : `🏃 En curso: ${tiempoLegible}`
+}
+
+const manejarEnviarTicket = async () => {
+  if (!asuntoTicket.value || !cuerpoTicket.value) return
+  try {
+    await apiCrear({ 
+      titulo: asuntoTicket.value, 
+      descripcion: cuerpoTicket.value,
+      asignadoEmail: correoDestinatario.value || null,
+      archivo: archivoAdjuntoBase64.value,
+      prioridad: prioridadTicket.value,
+      proyecto: proyectoTicket.value || null
+    })
+    alert('📧 Requerimiento enrutado y guardado con éxito.')
+    asuntoTicket.value = ''
+    cuerpoTicket.value = ''
+    correoDestinatario.value = ''
+    proyectoTicket.value = ''
+    prioridadTicket.value = 'BAJA'
+    archivoAdjuntoBase64.value = null
+    if (fileInputRef.value) fileInputRef.value.value = ''
+    refetch()
+  } catch (err: any) { alert('Error: ' + err.message) }
 }
 
 const ticketsFiltradosConPrivacidad = computed(() => {
@@ -390,39 +621,6 @@ const ejecutarDictamenAdmin = async (aprobado: boolean) => {
 const cerrarWorkspace = () => {
   ticketIdActivo.value = null
   localStorage.removeItem('relant_active_ticket_id')
-}
-
-// --- 📨 CREAR / ENVIAR NUEVO TICKET ---
-const manejarEnviarTicket = async () => {
-  if (!asuntoTicket.value.trim() || !cuerpoTicket.value.trim()) {
-    alert('Por favor complete título y descripción del requerimiento.')
-    return
-  }
-
-  try {
-    const asignadoEmail = correoDestinatario.value.trim() || null
-    await apiCrear({
-      titulo: asuntoTicket.value.trim(),
-      descripcion: cuerpoTicket.value.trim(),
-      asignadoEmail,
-      archivo: archivoAdjuntoBase64.value || null,
-      prioridad: prioridadTicket.value,
-      proyecto: proyectoTicket.value || null
-    })
-
-    // limpiar formulario
-    correoDestinatario.value = ''
-    asuntoTicket.value = ''
-    cuerpoTicket.value = ''
-    archivoAdjuntoBase64.value = null
-    proyectoTicket.value = ''
-    prioridadTicket.value = 'BAJA'
-
-    alert('✓ Requerimiento creado correctamente.')
-    refetch()
-  } catch (e: any) {
-    alert('Error al crear el requerimiento: ' + (e.message || e))
-  }
 }
 </script>
 
@@ -553,12 +751,12 @@ const manejarEnviarTicket = async () => {
           </div>
         </div>
 
-        <!-- EXPORTAR REPORTES -->
+        <!-- EXPORTAR REPORTES (AHORA REORGANIZADO PARA INCORPORAR EXCEL Y PDF PARALELOS) -->
         <div :class="esModoOscuro ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-slate-200'" class="w-full rounded-2xl border shadow-md overflow-hidden text-left">
           <div :class="esModoOscuro ? 'border-zinc-800 bg-zinc-950/40' : 'border-slate-200 bg-slate-50/50'" class="p-3 sm:p-4 border-b flex items-center justify-between">
             <h3 class="text-xs font-black tracking-wider uppercase">📊 Exportar Reporte Operacional</h3>
           </div>
-          <div class="p-4 sm:p-6 grid grid-cols-1 sm:grid-cols-3 gap-4 items-end">
+          <div class="p-4 sm:p-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
             <div class="flex flex-col space-y-1">
               <label class="text-[10px] font-black text-zinc-400 uppercase tracking-wider">Fecha de Inicio:</label>
               <input v-model="fechaInicioReporte" type="date" :class="esModoOscuro ? 'bg-zinc-950 border-zinc-800 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'" class="p-2.5 text-xs rounded-xl border focus:outline-hidden" />
@@ -567,7 +765,12 @@ const manejarEnviarTicket = async () => {
               <label class="text-[10px] font-black text-zinc-400 uppercase tracking-wider">Fecha de Fin:</label>
               <input v-model="fechaFinReporte" type="date" :class="esModoOscuro ? 'bg-zinc-950 border-zinc-800 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'" class="p-2.5 text-xs rounded-xl border focus:outline-hidden" />
             </div>
-            <button @click="descargarReporteExcel" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs uppercase tracking-widest py-3 rounded-xl cursor-pointer shadow-md">📥 Descargar Excel</button>
+            <button @click="descargarReporteExcel" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs uppercase tracking-widest py-3 rounded-xl cursor-pointer shadow-md transition-all">
+              📥 Descargar Excel
+            </button>
+            <button @click="descargarReportePdf" class="w-full bg-red-700 hover:bg-red-800 text-white font-black text-xs uppercase tracking-widest py-3 rounded-xl cursor-pointer shadow-md transition-all">
+              📄 Descargar PDF
+            </button>
           </div>
         </div>
 
@@ -670,7 +873,6 @@ const manejarEnviarTicket = async () => {
                 <button v-if="ticket.estado === 'COMPLETADO'" @click="ticketIdActivo = ticket.id" class="bg-linear-to-r from-red-950 to-zinc-900 border border-red-900/40 text-red-400 text-xs font-black px-4 py-2.5 rounded-xl transition cursor-pointer w-full md:w-auto">{{ esAdmin ? '🛡️ Auditar Folio' : '⏳ En Revisión' }}</button>
                 <button v-if="ticket.estado === 'APROBADO'" @click="ticketIdActivo = ticket.id" class="text-xs font-bold tracking-wider uppercase px-4 py-2.5 rounded-xl border border-dashed border-zinc-800 text-zinc-400 hover:text-zinc-200 cursor-pointer w-full md:w-auto">🔒 Liberado (Ver Chat)</button>
                 
-                <!-- 🔄 ¡RESTAURADO COMPLETO! BOTONES PARA EL ESTADO RECHAZADO -->
                 <div v-if="ticket.estado === 'RECHAZADO'" class="flex gap-2 w-full md:w-auto">
                   <button @click="ticketIdActivo = ticket.id" class="text-xs font-bold tracking-wider uppercase px-3 py-2.5 rounded-xl border border-dashed border-zinc-800 text-zinc-400 hover:text-zinc-200 cursor-pointer text-center flex-1 md:flex-initial">👁️ Ver Chat</button>
                   <button @click="activarProcesamientoTicket(ticket)" class="bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold px-4 py-2.5 rounded-xl transition cursor-pointer flex-1 md:flex-initial text-center">🔄 Reabrir</button>
