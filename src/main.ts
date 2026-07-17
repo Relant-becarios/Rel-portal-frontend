@@ -13,7 +13,7 @@ import router from './router'
 
 // 1. Conexión base a tu servidor Node.js (Puerto 4000)
 const httpLink = createHttpLink({
-  uri: 'https://rel-portal-backend.onrender.com/',
+  uri: 'https://rel-portal-backend-gitlab.onrender.com',
 })
 
 // 2. Middleware para inyectar el Token (JWT) de Firebase en los Headers de forma asíncrona
