@@ -55,7 +55,7 @@ const ticketActivoWorkspace = computed(() => {
   return result.value?.misTickets?.find((t: any) => t.id === ticketIdActivo.value) || null
 })
 
-// Conversión del string del chat en renglones reactivos (¡ESPACIO CORREGIDO AQUÍ!)
+// Conversión del string del chat en renglones reactivos
 const bitacoraProgresoAcumulada = computed(() => {
   const ticket = ticketActivoWorkspace.value
   if (!ticket) return []
@@ -509,6 +509,7 @@ const cerrarWorkspace = () => {
                   </div>
                 </div>
 
+                <!-- 🏃 ESTADO: EN DESARROLLO -->
                 <div v-if="ticketActivoWorkspace.estado === 'TRABAJANDO'" :class="esModoOscuro ? 'border-zinc-800' : 'border-slate-200'" class="space-y-3 pt-2 border-t shrink-0">
                   <div class="flex gap-2">
                     <input v-model="notaProgresoActual" @keyup.enter="registrarProgresoEnCaliente" type="text" placeholder="Escribe un avance..." :class="esModoOscuro ? 'bg-zinc-900 border-zinc-800 text-white' : 'bg-white border-slate-200 text-slate-800'" class="rounded-xl px-3 py-2 text-xs flex-1 focus:outline-hidden" />
@@ -516,6 +517,25 @@ const cerrarWorkspace = () => {
                   </div>
                   <button @click="despacharAuditoriaAdmin" class="w-full bg-red-700 hover:bg-red-800 text-white font-black text-xs uppercase tracking-widest py-2.5 rounded-xl shadow-md transition cursor-pointer">🏁 Enviar a Validación</button>
                 </div>
+
+                <!-- 🛡️ NUEVO PANEL INYECTADO: CONTROLES DE AUDITORÍA DE ADMINISTRACIÓN -->
+                <div v-if="ticketActivoWorkspace.estado === 'COMPLETADO' && esAdmin" :class="esModoOscuro ? 'border-zinc-800' : 'border-slate-200'" class="space-y-3 pt-2 border-t shrink-0 text-left">
+                  <div>
+                    <label class="text-[10px] uppercase font-bold text-zinc-400 block mb-1">Acta o Justificación del Dictamen (Obligatorio)</label>
+                    <input v-model="comentarioAdmin" type="text" placeholder="Escribe el porqué de la liberación o del rechazo..." :class="esModoOscuro ? 'bg-zinc-900 border-zinc-800 text-white' : 'bg-white border-slate-200 text-slate-800'" class="rounded-xl px-3 py-2 text-xs w-full focus:outline-hidden focus:border-red-700" />
+                  </div>
+                  <div class="grid grid-cols-2 gap-2">
+                    <button @click="ejecutarDictamenAdmin(true)" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs py-2.5 rounded-xl cursor-pointer">✓ Aprobar y Liberar</button>
+                    <button @click="ejecutarDictamenAdmin(false)" class="bg-red-600 hover:bg-red-700 text-white font-bold text-xs py-2.5 rounded-xl cursor-pointer">✕ Rechazar Requerimiento</button>
+                  </div>
+                </div>
+
+                <!-- ⏳ MENSAJE DE ESPERA PARA USUARIOS REGULARES -->
+                <div v-if="ticketActivoWorkspace.estado === 'COMPLETADO' && !esAdmin" :class="esModoOscuro ? 'bg-zinc-900/60 border-zinc-800' : 'bg-slate-100 border-slate-200 text-slate-600'" class="p-3 rounded-xl border border-dashed text-center shrink-0">
+                  <span class="text-xs font-bold tracking-wider block">⏳ Requerimiento Bloqueado</span>
+                  <p class="text-[11px] mt-0.5">Bajo auditoría del cuerpo de administración.</p>
+                </div>
+
               </div>
             </div>
           </div>
@@ -539,7 +559,7 @@ const cerrarWorkspace = () => {
           </div>
         </div>
 
-        <!-- GENERAR REQUERIMIENTO CON NUEVOS NIVELES Y PROYECTO -->
+        <!-- GENERAR REQUERIMIENTO -->
         <div :class="esModoOscuro ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-slate-200'" class="w-full rounded-2xl border shadow-md overflow-hidden text-left">
           <div class="bg-red-700 p-3 sm:p-4 text-white">
             <h3 class="text-xs font-black tracking-wider uppercase">Generar Requerimiento Dirigido</h3>
@@ -584,7 +604,7 @@ const cerrarWorkspace = () => {
               <input type="file" ref="fileInputRef" @change="manejarSubidaArchivo" accept="image/*,.pdf,.doc,.docx" class="text-xs text-zinc-400 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold cursor-pointer w-full" />
             </div>
 
-            <textarea v-model="cuerpoTicket" rows="3" required :class="esModoOscuro ? 'bg-zinc-950 border-zinc-800 text-white' : 'bg-slate-50 border-slate-200'" class="w-full p-3 sm:p-4 text-sm rounded-xl border focus:outline-hidden" placeholder="Especificaciones técnicas..."></textarea>
+            <textarea v-model="cuerpoTicket" rows="3" required :class="esModoOscuro ? 'bg-zinc-950 border-zinc-800 text-white ' : 'bg-slate-50 border-slate-200'" class="w-full p-3 sm:p-4 text-sm rounded-xl border focus:outline-hidden" placeholder="Especificaciones técnicas..."></textarea>
             <div class="flex justify-end"><button type="submit" class="w-full sm:w-auto bg-red-700 hover:bg-red-800 text-white font-black text-xs uppercase tracking-widest px-6 py-2.5 rounded-xl cursor-pointer">Despachar Ticket</button></div>
           </form>
         </div>
@@ -603,11 +623,11 @@ const cerrarWorkspace = () => {
           <input v-model="busquedaQuery" type="text" placeholder="Buscar folio..." :class="esModoOscuro ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-slate-100 border-slate-200'" class="px-4 py-2 text-xs rounded-xl focus:outline-hidden w-full lg:w-64" />
         </div>
 
-        <!-- LISTADO DE TICKETS CON ENLACES ETIQUETADOS -->
+        <!-- LISTADO DE TICKETS -->
         <div class="space-y-4 sm:space-y-6">
           <div v-if="loading" class="text-center py-12 text-zinc-400 animate-pulse text-sm">Sincronizando registros con Prisma...</div>
           <div v-else-if="error" class="text-center py-12 text-red-500 text-sm font-semibold">Error de comunicación.</div>
-          <div v-else-if="ticketsFiltradosConPrivacidad.length === 0" class="text-center py-16 rounded-2xl text-sm border" :class="esModoOscuro ? 'bg-zinc-900 border-zinc-800 text-zinc-400' : 'bg-white border-slate-200 text-slate-500'">Bandeja vacía en esta sección.</div>
+          <div v-else-if="ticketsFiltradosConPrivacidad.length === 0" class="text-center py-16 rounded-2xl text-sm border" :class="esModoOscuro ? 'bg-zinc-900 border-zinc-400 text-zinc-400' : 'bg-white border-slate-200 text-slate-500'">Bandeja vacía en esta sección.</div>
 
           <div v-else v-for="ticket in ticketsFiltradosConPrivacidad" :key="ticket.id" :class="esModoOscuro ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-slate-200'" class="rounded-2xl border p-4 sm:p-6 space-y-4 transition-colors">
             
