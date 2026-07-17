@@ -1,8 +1,8 @@
-// src/firebase.js
 import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
+import { getMessaging } from "firebase/messaging"; // ➕ Importamos el gestor de mensajes en la nube
 
-// REEMPLAZA ESTO CON EL OBJETO REAL QUE TE DIO FIREBASE
+// REEMPLAZA ESTO CON EL OBJETO REAL QUE TE DI FREBASE
 const firebaseConfig = {
   apiKey: "AIzaSyCLUbHLHTuRaWijy93PDJwWXD_Z1y3NJzk",
   authDomain: "portal-4862a.firebaseapp.com",
@@ -14,3 +14,4 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
+export const messaging = getMessaging(app); // ➕ Exportamos la instancia para interceptar alertas push

@@ -1,21 +1,43 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
 import Sidebar from '../components/Sidebar.vue'
-import { useQuery } from '@vue/apollo-composable'
+import { useQuery, useMutation } from '@vue/apollo-composable' // 📊 Importamos useMutation junto a useQuery
 import { gql } from '@apollo/client/core'
 import { useRouter } from 'vue-router'
+import { messaging } from '../firebase' // 📱 Importamos la conexión centralizada de Firebase
+import { getToken } from 'firebase/messaging' // 📡 Importamos el generador de tokens de Google
 
 const router = useRouter()
 const esModoOscuro = ref(true)
 const menuMovilAbierto = ref(false) // 🍔 Control del menú en teléfonos
 
 // ☀️/🌙 Recuperar y recordar el tema seleccionado por el usuario en localStorage
-onMounted(() => {
+onMounted(async () => {
   const temaGuardado = localStorage.getItem('relant_theme')
   if (temaGuardado) {
     esModoOscuro.value = temaGuardado === 'oscuro'
   } else {
     esModoOscuro.value = true
+  }
+
+  // 🚀 PROTOCOLO AUTOMÁTICO DE SOLICITUD DE PERMISOS PUSH (PC Y TELÉFONO)
+  try {
+    const permiso = await Notification.requestPermission()
+    if (permiso === 'granted') {
+      // Solicita a los servidores de Google el identificador único de este dispositivo
+      // 💡 NOTA: Reemplaza 'TU_CLAVE_VAPID_PUBLICA_AQUI' por tu clave pública de Firebase Console (Configuración del proyecto > Mensajería)
+      const tokenDispositivo = await getToken(messaging, { 
+        vapidKey: 'TU_CLAVE_VAPID_PUBLICA_AQUI' 
+      })
+      
+      if (tokenDispositivo) {
+        // Le enviamos el identificador al backend para guardarlo en PostgreSQL
+        await vincularTokenDispositivo({ token: tokenDispositivo })
+        console.log('✓ Dispositivo sincronizado con éxito para alertas en tiempo real.')
+      }
+    }
+  } catch (error) {
+    console.log('Notificaciones push en espera de llaves VAPID válidas corporativas.')
   }
 })
 
@@ -67,6 +89,14 @@ const OBTENER_DATOS_HOME = gql`
   }
 `
 const { result, loading } = useQuery(OBTENER_DATOS_HOME)
+
+// 📱 MUTACIÓN PARA REGISTRAR DISPOSITIVO LOGUEADO
+const GUARDAR_TOKEN_DISPOSITIVO_MUTATION = gql`
+  mutation GuardarToken($token: String!) {
+    guardarTokenDispositivo(token: $token) { id }
+  }
+`
+const { mutate: vincularTokenDispositivo } = useMutation(GUARDAR_TOKEN_DISPOSITIVO_MUTATION)
 
 // --- 📊 LÓGICA DE FILTRADO Y MÉTRICAS DE CONTADORES ---
 const ticketsFiltradosConPrivacidad = computed(() => {
@@ -255,7 +285,7 @@ const estadoPendientes = computed(() => {
                 </p>
               </div>
 
-              <!-- ⚡ ACCESOS DIRECTOS DETALLADOS (QUIEN MANDO + PRIORIDAD + PROYECTO) -->
+              <!-- ⚡ ACCESOS DIRECTOS DETALLADOS -->
               <div v-if="listaTicketsPendientes.length > 0" class="pt-2 border-t" :class="esModoOscuro ? 'border-zinc-800' : 'border-slate-200'">
                 <label class="text-[9px] uppercase font-bold text-zinc-500 block mb-1.5 tracking-wider">⚡ ACCESOS DIRECTOS A PENDIENTES:</label>
                 <div class="space-y-2 max-h-40 overflow-y-auto pr-1">
