@@ -27,7 +27,7 @@ const cuerpoTicket = ref('')
 const archivoAdjuntoBase64 = ref<string | null>(null)
 const fileInputRef = ref<HTMLInputElement | null>(null)
 
-// --- ⚙️ NUEVAS VARIABLES PARA CAMPOS OPERACIONALES ---
+// --- ⚙️ CAMPOS OPERACIONALES ---
 const prioridadTicket = ref('BAJA')
 const proyectoTicket = ref('')
 
@@ -265,7 +265,7 @@ const { mutate: apiChat } = useMutation(ENVIAR_MENSAJE_CHAT)
 
 const esAdmin = computed(() => result.value?.me?.rol === 'ADMIN')
 
-// --- ⏱️ FUNCIÓN DE TIEMPOS SLA ---
+// --- ⏱️ FUNCIÓN DE TIEMPOS SLA (¡CORREGIDA VARIABLE SEMANAS!) ---
 const convertirMinutosATexto = (totalMinutos: number): string => {
   if (totalMinutos <= 0) return "0 min"
   const MINUTOS_ANIO = 365 * 24 * 60
@@ -281,8 +281,11 @@ const convertirMinutosATexto = (totalMinutos: number): string => {
   if (anios > 0) { partes.push(`${anios} ${anios === 1 ? 'año' : 'años'}`); restante %= MINUTOS_ANIO; }
   const meses = Math.floor(restante / MINUTOS_MES)
   if (meses > 0) { partes.push(`${meses} ${meses === 1 ? 'mes' : 'meses'}`); restante %= MINUTOS_MES; }
+  
+  // ⚡ SE CORRIGIÓ EL LLAMADO PASANDO WEEKS A SEMANAS
   const semanas = Math.floor(restante / MINUTOS_SEMANA)
   if (semanas > 0) { partes.push(`${semanas} ${semanas === 1 ? 'semana' : 'semanas'}`); restante %= MINUTOS_SEMANA; }
+  
   const dias = Math.floor(restante / MINUTOS_DIA)
   if (dias > 0) { partes.push(`${dias} ${dias === 1 ? 'día' : 'días'}`); restante %= MINUTOS_DIA; }
   const horas = Math.floor(restante / MINUTOS_HORA)
@@ -308,29 +311,6 @@ const formatearTiempoSLA = (ticket: any) => {
   
   const tiempoLegible = convertirMinutosATexto(minutosTotales)
   return ticket.fecha_completado ? `⏱️ Resuelto en: ${tiempoLegible}` : `🏃 En curso: ${tiempoLegible}`
-}
-
-const manejarEnviarTicket = async () => {
-  if (!asuntoTicket.value || !cuerpoTicket.value) return
-  try {
-    await apiCrear({ 
-      titulo: asuntoTicket.value, 
-      descripcion: cuerpoTicket.value,
-      asignadoEmail: correoDestinatario.value || null,
-      archivo: archivoAdjuntoBase64.value,
-      prioridad: prioridadTicket.value,
-      proyecto: proyectoTicket.value || null
-    })
-    alert('📧 Requerimiento enrutado y guardado con éxito.')
-    asuntoTicket.value = ''
-    cuerpoTicket.value = ''
-    correoDestinatario.value = ''
-    proyectoTicket.value = ''
-    prioridadTicket.value = 'BAJA'
-    archivoAdjuntoBase64.value = null
-    if (fileInputRef.value) fileInputRef.value.value = ''
-    refetch()
-  } catch (err: any) { alert('Error: ' + err.message) }
 }
 
 const ticketsFiltradosConPrivacidad = computed(() => {
@@ -407,10 +387,42 @@ const ejecutarDictamenAdmin = async (aprobado: boolean) => {
   } catch (e) {}
 }
 
-// 🎯 FUNCIÓN PARA CERRAR EL WORKSPACE LIMPIANDO COMPLETAMENTE EL LOCALSTORAGE
 const cerrarWorkspace = () => {
   ticketIdActivo.value = null
   localStorage.removeItem('relant_active_ticket_id')
+}
+
+// --- 📨 CREAR / ENVIAR NUEVO TICKET ---
+const manejarEnviarTicket = async () => {
+  if (!asuntoTicket.value.trim() || !cuerpoTicket.value.trim()) {
+    alert('Por favor complete título y descripción del requerimiento.')
+    return
+  }
+
+  try {
+    const asignadoEmail = correoDestinatario.value.trim() || null
+    await apiCrear({
+      titulo: asuntoTicket.value.trim(),
+      descripcion: cuerpoTicket.value.trim(),
+      asignadoEmail,
+      archivo: archivoAdjuntoBase64.value || null,
+      prioridad: prioridadTicket.value,
+      proyecto: proyectoTicket.value || null
+    })
+
+    // limpiar formulario
+    correoDestinatario.value = ''
+    asuntoTicket.value = ''
+    cuerpoTicket.value = ''
+    archivoAdjuntoBase64.value = null
+    proyectoTicket.value = ''
+    prioridadTicket.value = 'BAJA'
+
+    alert('✓ Requerimiento creado correctamente.')
+    refetch()
+  } catch (e: any) {
+    alert('Error al crear el requerimiento: ' + (e.message || e))
+  }
 }
 </script>
 
@@ -518,11 +530,11 @@ const cerrarWorkspace = () => {
                   <button @click="despacharAuditoriaAdmin" class="w-full bg-red-700 hover:bg-red-800 text-white font-black text-xs uppercase tracking-widest py-2.5 rounded-xl shadow-md transition cursor-pointer">🏁 Enviar a Validación</button>
                 </div>
 
-                <!-- 🛡️ NUEVO PANEL INYECTADO: CONTROLES DE AUDITORÍA DE ADMINISTRACIÓN -->
+                <!-- 🛡️ PANEL DE AUDITORÍA DE ADMINISTRACIÓN -->
                 <div v-if="ticketActivoWorkspace.estado === 'COMPLETADO' && esAdmin" :class="esModoOscuro ? 'border-zinc-800' : 'border-slate-200'" class="space-y-3 pt-2 border-t shrink-0 text-left">
                   <div>
                     <label class="text-[10px] uppercase font-bold text-zinc-400 block mb-1">Acta o Justificación del Dictamen (Obligatorio)</label>
-                    <input v-model="comentarioAdmin" type="text" placeholder="Escribe el porqué de la liberación o del rechazo..." :class="esModoOscuro ? 'bg-zinc-900 border-zinc-800 text-white' : 'bg-white border-slate-200 text-slate-800'" class="rounded-xl px-3 py-2 text-xs w-full focus:outline-hidden focus:border-red-700" />
+                    <input v-model="comentarioAdmin" type="text" placeholder="Escribe el porqué de la liberación o del rechazo..." :class="esModoOscuro ? 'bg-zinc-900 border-zinc-800 text-white' : 'bg-white border-slate-200 text-slate-800'" class="rounded-xl px-3 py-2 text-xs w-full focus:outline-hidden" />
                   </div>
                   <div class="grid grid-cols-2 gap-2">
                     <button @click="ejecutarDictamenAdmin(true)" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs py-2.5 rounded-xl cursor-pointer">✓ Aprobar y Liberar</button>
@@ -657,7 +669,14 @@ const cerrarWorkspace = () => {
                 <button v-if="ticket.estado === 'TRABAJANDO'" @click="ticketIdActivo = ticket.id" class="bg-red-700 hover:bg-red-800 text-white text-xs font-bold px-4 py-2.5 rounded-xl transition cursor-pointer w-full md:w-auto">💼 Abrir Panel / Chat</button>
                 <button v-if="ticket.estado === 'COMPLETADO'" @click="ticketIdActivo = ticket.id" class="bg-linear-to-r from-red-950 to-zinc-900 border border-red-900/40 text-red-400 text-xs font-black px-4 py-2.5 rounded-xl transition cursor-pointer w-full md:w-auto">{{ esAdmin ? '🛡️ Auditar Folio' : '⏳ En Revisión' }}</button>
                 <button v-if="ticket.estado === 'APROBADO'" @click="ticketIdActivo = ticket.id" class="text-xs font-bold tracking-wider uppercase px-4 py-2.5 rounded-xl border border-dashed border-zinc-800 text-zinc-400 hover:text-zinc-200 cursor-pointer w-full md:w-auto">🔒 Liberado (Ver Chat)</button>
+                
+                <!-- 🔄 ¡RESTAURADO COMPLETO! BOTONES PARA EL ESTADO RECHAZADO -->
+                <div v-if="ticket.estado === 'RECHAZADO'" class="flex gap-2 w-full md:w-auto">
+                  <button @click="ticketIdActivo = ticket.id" class="text-xs font-bold tracking-wider uppercase px-3 py-2.5 rounded-xl border border-dashed border-zinc-800 text-zinc-400 hover:text-zinc-200 cursor-pointer text-center flex-1 md:flex-initial">👁️ Ver Chat</button>
+                  <button @click="activarProcesamientoTicket(ticket)" class="bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold px-4 py-2.5 rounded-xl transition cursor-pointer flex-1 md:flex-initial text-center">🔄 Reabrir</button>
+                </div>
               </div>
+
             </div>
           </div>
         </div>
