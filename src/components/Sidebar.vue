@@ -43,7 +43,7 @@ const manejarCerrarSesion = async () => {
         </router-link>
       </nav>
     </div>
-    
+
 <a 
   href="https://relantapi.netlify.app/" 
   target="_blank" 
@@ -51,7 +51,7 @@ const manejarCerrarSesion = async () => {
   class="flex items-center space-x-3 px-4 py-3 rounded-xl transition text-xs font-bold text-zinc-400 hover:text-white hover:bg-zinc-800/80 group"
 >
   <span class="text-base group-hover:scale-110 transition-transform">🌐</span>
-  <span>Relant API</span>
+  <span>Gestor de Proyectos</span>
   <span class="text-[9px] bg-red-950 border border-red-900 text-red-400 px-1.5 py-0.5 rounded font-mono ml-auto">
     EXT ↗
   </span>
