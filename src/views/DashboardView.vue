@@ -179,13 +179,34 @@ const ENVIAR_MENSAJE_CHAT = gql`
   }
 `
 
+// 🎯 MUTACIÓN PARA CAMBIAR PRIORIDAD EN TIEMPO REAL
+const CAMBIAR_PRIORIDAD_MUTATION = gql`
+  mutation CambiarPrioridad($ticketId: String!, $prioridad: String!) {
+    cambiarPrioridadTicket(ticketId: $ticketId, prioridad: $prioridad) {
+      id
+      prioridad
+    }
+  }
+`
+
 const { mutate: apiCrear } = useMutation(CREAR_TICKET)
 const { mutate: apiIniciar } = useMutation(INICIAR_TRABAJO)
 const { mutate: apiCompletar } = useMutation(COMPLETAR_TRABAJO)
 const { mutate: apiEvaluar } = useMutation(EVALUAR_TICKET)
 const { mutate: apiChat } = useMutation(ENVIAR_MENSAJE_CHAT)
+const { mutate: apiCambiarPrioridad } = useMutation(CAMBIAR_PRIORIDAD_MUTATION)
 
 const esAdmin = computed(() => result.value?.me?.rol === 'ADMIN')
+
+// Función para procesar la actualización de prioridad desde el desplegable
+const ejecutarCambioPrioridad = async (ticketId: string, nuevaPrioridad: string) => {
+  try {
+    await apiCambiarPrioridad({ ticketId, prioridad: nuevaPrioridad })
+    refetch()
+  } catch (err: any) {
+    alert('Error al actualizar la prioridad: ' + err.message)
+  }
+}
 
 // Lógica de filtrado común para reportes
 const obtenerTicketsFiltradosReporte = () => {
@@ -278,7 +299,7 @@ const descargarReporteExcel = () => {
   document.body.removeChild(enlaceDescarga)
 }
 
-// --- 📄 NUEVA FUNCIÓN: EXPORTACIÓN NATAL A COMPILACIÓN PDF ---
+// --- 📄 EXPORTACIÓN PDF ---
 const descargarReportePdf = () => {
   if (!fechaInicioReporte.value || !fechaFinReporte.value) {
     alert('❌ Por favor, seleccione el rango completo de fechas (Inicio y Fin).')
@@ -295,7 +316,6 @@ const descargarReportePdf = () => {
   const periodoVisual = `${formatearFechaVisual(fechaInicioReporte.value)} – ${formatearFechaVisual(fechaFinReporte.value)}`
   const hoyVisual = new Date().toLocaleDateString('es-MX')
 
-  // Construcción de la estructura HTML dinámica bajo el formato exacto solicitado
   let itemsHtml = ''
   filtradosPorFecha.forEach((t: any, index: number) => {
     const folio = 'RLN-' + t.id.substring(0, 6).toUpperCase()
@@ -452,7 +472,6 @@ const descargarReportePdf = () => {
     </html>
   `
 
-  // Inyección mediante Iframe invisible para disparar el motor nativo de guardado PDF
   const iframe = document.createElement('iframe')
   iframe.style.position = 'fixed'
   iframe.style.right = '0'
@@ -855,7 +874,19 @@ const cerrarWorkspace = () => {
                   👤 Para: <strong class="text-amber-500" :title="ticket.asignado?.email ?? ''">{{ ticket.asignado?.nombre || 'Nadie' }}</strong>
                 </span>
                 
-                <span v-if="ticket.prioridad" :class="obtenerColorPrioridad(ticket.prioridad)" class="px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider">{{ ticket.prioridad }}</span>
+                <!-- 🎯 SELECTOR INTERACTIVO DE PRIORIDAD EN VIVO -->
+                <select 
+                  :value="ticket.prioridad || 'BAJA'" 
+                  @change="(e) => ejecutarCambioPrioridad(ticket.id, (e.target as HTMLSelectElement).value)"
+                  :class="obtenerColorPrioridad(ticket.prioridad)" 
+                  class="px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider cursor-pointer focus:outline-hidden transition-colors border"
+                >
+                  <option value="BAJA" class="bg-zinc-900 text-zinc-300">🟢 BAJA</option>
+                  <option value="MEDIA" class="bg-zinc-900 text-blue-400">🔵 MEDIA</option>
+                  <option value="ALTA" class="bg-zinc-900 text-amber-400">🟡 ALTA</option>
+                  <option value="CRITICA" class="bg-zinc-900 text-red-400">🔴 CRÍTICA</option>
+                </select>
+
                 <span v-if="ticket.proyecto" class="bg-blue-950/50 border border-blue-900/40 text-blue-400 px-2 py-0.5 rounded-md text-[10px] font-bold">📁 {{ ticket.proyecto }}</span>
               </div>
               <span class="text-[10px] sm:text-xs font-bold px-2.5 py-0.5 rounded-lg border shrink-0" :class="esModoOscuro ? 'border-zinc-800 bg-zinc-950 text-zinc-300' : 'border-slate-200 bg-slate-50 text-slate-700'">{{ formatearTiempoSLA(ticket) }}</span>
