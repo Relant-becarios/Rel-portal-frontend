@@ -43,8 +43,7 @@ const manejarCerrarSesion = async () => {
         </router-link>
       </nav>
     </div>
-
-    <!-- 🌐 ACCESO EXTERNO A RELANT API -->
+    
 <a 
   href="https://relantapi.netlify.app/" 
   target="_blank" 
