@@ -43,6 +43,20 @@ const manejarCerrarSesion = async () => {
         </router-link>
       </nav>
     </div>
+
+    <!-- 🌐 ACCESO EXTERNO A RELANT API -->
+<a 
+  href="https://relantapi.netlify.app/" 
+  target="_blank" 
+  rel="noopener noreferrer"
+  class="flex items-center space-x-3 px-4 py-3 rounded-xl transition text-xs font-bold text-zinc-400 hover:text-white hover:bg-zinc-800/80 group"
+>
+  <span class="text-base group-hover:scale-110 transition-transform">🌐</span>
+  <span>Relant API</span>
+  <span class="text-[9px] bg-red-950 border border-red-900 text-red-400 px-1.5 py-0.5 rounded font-mono ml-auto">
+    EXT ↗
+  </span>
+</a>
     
     <div :class="dark ? 'border-red-950/30 bg-zinc-950/20' : 'border-slate-100 bg-slate-50/50'" class="p-4 border-t flex flex-col space-y-3">
       <div class="flex items-center space-x-3">
