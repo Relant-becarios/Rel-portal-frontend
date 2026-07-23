@@ -167,7 +167,7 @@ const manejarEnviarTicket = async () => {
       <main class="flex-1 overflow-y-auto p-8">
         <div :class="esModoOscuro ? 'bg-zinc-900 border-red-950/30' : 'bg-white border-slate-200'" class="max-w-3xl rounded-2xl border shadow-xl overflow-hidden">
           
-          <div class="bg-gradient-to-r from-red-900 to-zinc-900 p-4 text-white flex items-center justify-between">
+          <div class="bg-linear-to-r from-red-900 to-zinc-900 p-4 text-white flex items-center justify-between">
             <div class="flex items-center space-x-2">
               <span class="text-sm">✍️</span>
               <h3 class="text-xs font-black tracking-wider uppercase">Redactar Nuevo Requerimiento Interno</h3>
