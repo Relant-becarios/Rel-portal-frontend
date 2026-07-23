@@ -8,22 +8,52 @@ import { useRouter } from 'vue-router'
 const router = useRouter()
 const esModoOscuro = ref(true)
 
-// Campos estilo Correo Electrónico
+// Campos del formulario
 const correoDestinatario = ref('')
+const prioridadTicket = ref('BAJA')
+const proyectoTicket = ref('')
 const asuntoTicket = ref('')
 const cuerpoTicket = ref('')
 const archivoAdjuntoBase64 = ref<string | null>(null)
 const fileInputRef = ref<HTMLInputElement | null>(null)
 
+// --- LISTA DE PROYECTOS DESDE GESTOR DE PROYECTOS (FIREBASE) ---
+const listaProyectos = ref<string[]>([])
+const cargandoProyectos = ref(true)
+
+const cargarProyectosFirebase = async () => {
+  try {
+    cargandoProyectos.value = true
+    const res = await fetch('https://version-1-e3799-default-rtdb.firebaseio.com/projects.json')
+    const data = await res.json()
+    
+    if (data) {
+      // 🛡️ FILTRO: Solo incluimos los proyectos cuyo estado NO sea 'completed'
+      const nombres = Object.values(data)
+        .filter((p: any) => p && p.status !== 'completed') // 👈 Oculta los completados
+        .map((p: any) => p.name)
+        .filter((nombre: any) => typeof nombre === 'string' && nombre.trim() !== '')
+      
+      listaProyectos.value = Array.from(new Set(nombres)) // Quitar duplicados
+    }
+  } catch (err) {
+    console.error('Error al consultar proyectos en Firebase:', err)
+  } finally {
+    cargandoProyectos.value = false
+  }
+}
+
 // --- VARIABLES DEL AUTOCOMPLETADO INTELIGENTE ---
 const mostrarSugerencias = ref(false)
 
-// Sincronizar el tema seleccionado por el usuario en localStorage
 onMounted(() => {
   const temaGuardado = localStorage.getItem('relant_theme')
   if (temaGuardado) {
     esModoOscuro.value = temaGuardado === 'oscuro'
   }
+  
+  // Cargar proyectos de la Realtime Database al iniciar la vista
+  cargarProyectosFirebase()
 })
 
 // --- ⚙️ INTERFACES ESTRICTAS DE TYPESCRIPT ---
@@ -77,7 +107,6 @@ const manejarSubidaArchivo = (event: Event) => {
     return
   }
 
-  // Validación: Máximo 3MB por archivo
   if (file.size > 3 * 1024 * 1024) {
     alert('⚠️ El archivo supera el límite de 3MB. Por favor sube una captura o documento más ligero.')
     target.value = ''
@@ -92,10 +121,10 @@ const manejarSubidaArchivo = (event: Event) => {
   reader.readAsDataURL(file)
 }
 
-// Mutación actualizada con soporte para destinatario y archivo adjunto
+// Mutación de GraphQL con prioridad y proyecto integrados
 const CREAR_TICKET_MUTATION = gql`
-  mutation NuevoTicket($titulo: String!, $descripcion: String!, $asignadoEmail: String, $archivo: String) {
-    crearTicket(titulo: $titulo, descripcion: $descripcion, asignadoEmail: $asignadoEmail, archivo: $archivo) { 
+  mutation NuevoTicket($titulo: String!, $descripcion: String!, $asignadoEmail: String, $archivo: String, $prioridad: String, $proyecto: String) {
+    crearTicket(titulo: $titulo, descripcion: $descripcion, asignadoEmail: $asignadoEmail, archivo: $archivo, prioridad: $prioridad, proyecto: $proyecto) { 
       id 
     }
   }
@@ -109,7 +138,9 @@ const manejarEnviarTicket = async () => {
       titulo: asuntoTicket.value, 
       descripcion: cuerpoTicket.value,
       asignadoEmail: correoDestinatario.value || null,
-      archivo: archivoAdjuntoBase64.value
+      archivo: archivoAdjuntoBase64.value,
+      prioridad: prioridadTicket.value,
+      proyecto: proyectoTicket.value || null
     })
     
     alert('📧 Requerimiento generado y despachado con éxito.')
@@ -122,7 +153,7 @@ const manejarEnviarTicket = async () => {
 </script>
 
 <template>
-  <div :class="esModoOscuro ? 'bg-zinc-950 text-zinc-100' : 'bg-slate-50 text-slate-800'" class="flex min-h-screen transition-colors duration-200">
+  <div :class="esModoOscuro ? 'bg-zinc-950 text-zinc-100' : 'bg-slate-50 text-slate-800'" class="flex min-h-screen transition-colors duration-200 font-sans">
     <Sidebar :dark="esModoOscuro" />
     
     <div class="flex-1 flex flex-col min-w-0">
@@ -136,7 +167,7 @@ const manejarEnviarTicket = async () => {
       <main class="flex-1 overflow-y-auto p-8">
         <div :class="esModoOscuro ? 'bg-zinc-900 border-red-950/30' : 'bg-white border-slate-200'" class="max-w-3xl rounded-2xl border shadow-xl overflow-hidden">
           
-          <div class="bg-linear-to-r from-red-900 to-zinc-900 p-4 text-white flex items-center justify-between">
+          <div class="bg-gradient-to-r from-red-900 to-zinc-900 p-4 text-white flex items-center justify-between">
             <div class="flex items-center space-x-2">
               <span class="text-sm">✍️</span>
               <h3 class="text-xs font-black tracking-wider uppercase">Redactar Nuevo Requerimiento Interno</h3>
@@ -144,11 +175,11 @@ const manejarEnviarTicket = async () => {
             <span class="text-[9px] font-mono opacity-60">Relant Mail-To-Ticket Protocol</span>
           </div>
 
-          <form @submit.prevent="manejarEnviarTicket" class="p-6 space-y-4">
+          <form @submit.prevent="manejarEnviarTicket" class="p-6 space-y-4 text-left">
             
-            <!-- 👤 INPUT CON AUTOCOMPLETADO INTERACTIVO ADAPTADO -->
+            <!-- 👤 INPUT PARA DESTINATARIO -->
             <div class="flex items-center border-b pb-2 relative" :class="esModoOscuro ? 'border-zinc-800' : 'border-slate-100'">
-              <label class="w-16 text-xs font-bold text-slate-400 uppercase tracking-wider">Para:</label>
+              <label class="w-20 text-xs font-bold text-slate-400 uppercase tracking-wider">Para:</label>
               <div class="flex-1 relative">
                 <input 
                   v-model="correoDestinatario" 
@@ -156,11 +187,10 @@ const manejarEnviarTicket = async () => {
                   @focus="mostrarSugerencias = true"
                   @blur="ocultarSugerenciasConRetraso"
                   :class="esModoOscuro ? 'bg-transparent text-white placeholder-zinc-600' : 'bg-transparent text-slate-900 placeholder-slate-400'" 
-                  class="w-full text-sm focus:outline-hidden" 
+                  class="w-full text-sm focus:outline-none" 
                   placeholder="empleado@relant.com o Nombre (O dejas vacío para Mesa General)" 
                 />
                 
-                <!-- CAJA FLOTANTE DE SUGERENCIAS EN VIVO -->
                 <div 
                   v-if="mostrarSugerencias && usuariosSugeridos.length > 0"
                   :class="esModoOscuro ? 'bg-zinc-900 border-zinc-800 text-white divide-zinc-800' : 'bg-white border-slate-200 text-slate-800 divide-slate-100'"
@@ -180,21 +210,54 @@ const manejarEnviarTicket = async () => {
               </div>
             </div>
 
+            <!-- 🎯 SELECCIÓN DE PRIORIDAD Y PROYECTO (DESPLEGABLE DE FIREBASE) -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 border-b pb-3" :class="esModoOscuro ? 'border-zinc-800' : 'border-slate-100'">
+              <div class="flex items-center">
+                <label class="w-20 text-xs font-bold text-slate-400 uppercase tracking-wider">Prioridad:</label>
+                <select 
+                  v-model="prioridadTicket" 
+                  :class="esModoOscuro ? 'bg-zinc-950 border-zinc-800 text-white' : 'bg-slate-50 border-slate-200 text-slate-800'" 
+                  class="flex-1 text-xs p-2.5 rounded-xl border focus:outline-none cursor-pointer font-bold"
+                >
+                  <option value="BAJA">🟢 BAJA</option>
+                  <option value="MEDIA">🔵 MEDIA</option>
+                  <option value="ALTA">🟡 ALTA</option>
+                  <option value="CRITICA">🔴 CRÍTICA</option>
+                </select>
+              </div>
+
+              <div class="flex items-center">
+                <label class="w-20 text-xs font-bold text-slate-400 uppercase tracking-wider">Proyecto:</label>
+                <select 
+                  v-model="proyectoTicket" 
+                  :class="esModoOscuro ? 'bg-zinc-950 border-zinc-800 text-white' : 'bg-slate-50 border-slate-200 text-slate-800'" 
+                  class="flex-1 text-xs p-2.5 rounded-xl border focus:outline-none cursor-pointer font-bold truncate"
+                >
+                  <option value="">📂 General / Sin Proyecto</option>
+                  <option v-if="cargandoProyectos" disabled>⏳ Cargando proyectos...</option>
+                  <option v-else v-for="nombreProj in listaProyectos" :key="nombreProj" :value="nombreProj">
+                    📁 {{ nombreProj }}
+                  </option>
+                </select>
+              </div>
+            </div>
+
+            <!-- 🎟️ ASUNTO DEL TICKET (HITO) -->
             <div class="flex items-center border-b pb-2" :class="esModoOscuro ? 'border-zinc-800' : 'border-slate-100'">
-              <label class="w-16 text-xs font-bold text-slate-400 uppercase tracking-wider">Asunto:</label>
+              <label class="w-20 text-xs font-bold text-slate-400 uppercase tracking-wider">Asunto:</label>
               <input 
                 v-model="asuntoTicket" 
                 type="text" 
                 required
                 :class="esModoOscuro ? 'bg-transparent text-white placeholder-zinc-600' : 'bg-transparent text-slate-900'" 
-                class="w-full text-sm font-bold focus:outline-hidden" 
-                placeholder="Título o asunto de la incidencia" 
+                class="w-full text-sm font-bold focus:outline-none" 
+                placeholder="Título del hito o incidencia a resolver..." 
               />
             </div>
 
-            <!-- 📎 SECCIÓN DE ARCHIVO ADJUNTO -->
+            <!-- 📎 ARCHIVO ADJUNTO -->
             <div class="flex items-center border-b pb-3" :class="esModoOscuro ? 'border-zinc-800' : 'border-slate-100'">
-              <label class="w-16 text-xs font-bold text-slate-400 uppercase tracking-wider">Adjunto:</label>
+              <label class="w-20 text-xs font-bold text-slate-400 uppercase tracking-wider">Adjunto:</label>
               <input 
                 type="file" 
                 ref="fileInputRef" 
@@ -207,16 +270,16 @@ const manejarEnviarTicket = async () => {
             <div class="pt-2">
               <textarea 
                 v-model="cuerpoTicket" 
-                rows="8" 
+                rows="6" 
                 required
                 :class="esModoOscuro ? 'bg-zinc-950 border-zinc-800 text-white placeholder-zinc-600' : 'bg-slate-50 border-slate-200'" 
-                class="w-full p-4 text-sm rounded-xl border focus:outline-hidden focus:border-red-900/50 transition leading-relaxed" 
-                placeholder="Escribe aquí las especificaciones del requerimiento técnico..."
+                class="w-full p-4 text-sm rounded-xl border focus:outline-none focus:border-red-900/50 transition leading-relaxed" 
+                placeholder="Escribe aquí las especificaciones detalladas de la tarea..."
               ></textarea>
             </div>
 
             <div class="flex justify-between items-center pt-4 border-t" :class="esModoOscuro ? 'border-zinc-800' : 'border-slate-100'">
-              <span class="text-[10px] text-slate-400 font-medium">🔒 Protocolo TLS activo</span>
+              <span class="text-[10px] text-slate-400 font-medium">🔒 Sincronización en tiempo real habilitada</span>
               <div class="flex space-x-2">
                 <button type="button" @click="router.push('/tickets')" class="bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-semibold text-xs px-5 py-2.5 rounded-xl transition cursor-pointer">Descartar</button>
                 <button type="submit" class="bg-red-700 hover:bg-red-800 text-white font-black text-xs uppercase tracking-wider px-6 py-2.5 rounded-xl shadow-lg transition cursor-pointer">Enviar Requerimiento</button>

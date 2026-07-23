@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import Sidebar from '../components/Sidebar.vue'
 import { useQuery, useMutation } from '@vue/apollo-composable'
 import { gql } from '@apollo/client/core'
 
-// Helper de formato de fecha local para inicializar los campos en el día de hoy
+// Helper de formato de fecha local
 const obtenerFechaHoyLocal = () => {
   const hoy = new Date()
   const anio = hoy.getFullYear()
@@ -26,10 +26,75 @@ const asuntoTicket = ref('')
 const cuerpoTicket = ref('')
 const archivoAdjuntoBase64 = ref<string | null>(null)
 const fileInputRef = ref<HTMLInputElement | null>(null)
-
-// --- ⚙️ CAMPOS OPERACIONALES ---
 const prioridadTicket = ref('BAJA')
 const proyectoTicket = ref('')
+const usarHitoManual = ref(false)
+
+// --- 📂 ESTRUCTURA DE PROYECTOS E HITOS DESDE FIREBASE ---
+interface Hito {
+  id: string
+  title: string
+  completed: boolean
+}
+
+interface ProyectoFirebase {
+  id: string
+  name: string
+  status: string
+  tasks: Hito[]
+}
+
+const mapaProyectos = ref<Record<string, ProyectoFirebase>>({})
+const listaProyectos = ref<string[]>([])
+const cargandoProyectos = ref(true)
+
+const cargarProyectosFirebase = async () => {
+  try {
+    cargandoProyectos.value = true
+    const res = await fetch('https://version-1-e3799-default-rtdb.firebaseio.com/projects.json')
+    const data = await res.json()
+    
+    if (data) {
+      const map: Record<string, ProyectoFirebase> = {}
+      const nombres: string[] = []
+
+      Object.entries(data).forEach(([id, p]: [string, any]) => {
+        if (p && p.status !== 'completed' && p.name) {
+          const nameTrim = p.name.trim()
+          let tasksRaw = p.tasks || []
+          let tasksArr: Hito[] = Array.isArray(tasksRaw) ? tasksRaw : Object.values(tasksRaw)
+
+          map[nameTrim] = {
+            id,
+            name: nameTrim,
+            status: p.status,
+            tasks: tasksArr
+          }
+          nombres.push(nameTrim)
+        }
+      })
+
+      mapaProyectos.value = map
+      listaProyectos.value = Array.from(new Set(nombres))
+    }
+  } catch (err) {
+    console.error('Error al consultar proyectos en Firebase:', err)
+  } finally {
+    cargandoProyectos.value = false
+  }
+}
+
+// 🎯 HITOS DISPONIBLES (CORREGIDO PARA TYPESCRIPT CON OPCIONAL CHAINING)
+const hitosDelProyectoSeleccionado = computed(() => {
+  if (!proyectoTicket.value) return []
+  return mapaProyectos.value[proyectoTicket.value]?.tasks || []
+})
+
+// Reiniciar Asunto al cambiar de proyecto
+watch(proyectoTicket, () => {
+  asuntoTicket.value = ''
+  usarHitoManual.value = false
+})
 
 // --- VARIABLES DEL AUTOCOMPLETADO INTELIGENTE ---
 const mostrarSugerencias = ref(false)
@@ -49,20 +114,17 @@ interface Usuario {
   email: string
 }
 
-// Buscador dinámico reactivo en el pool de Apollo
 const ticketActivoWorkspace = computed(() => {
   if (!ticketIdActivo.value) return null
   return result.value?.misTickets?.find((t: any) => t.id === ticketIdActivo.value) || null
 })
 
-// Conversión del string del chat en renglones reactivos
 const bitacoraProgresoAcumulada = computed(() => {
   const ticket = ticketActivoWorkspace.value
   if (!ticket) return []
   return ticket.chat ? ticket.chat.split('\n') : [`[⚙️ Sistema] Esperando primer mensaje de coordinación...`]
 })
 
-// Lógica reactiva para sugerencias de usuarios
 const usuariosSugeridos = computed(() => {
   const query = correoDestinatario.value.trim().toLowerCase()
   if (!query) return []
@@ -85,7 +147,6 @@ const ocultarSugerenciasConRetraso = () => {
   }, 200)
 }
 
-// Subida de archivos Base64
 const manejarSubidaArchivo = (event: Event) => {
   const target = event.target as HTMLInputElement
   const file = target.files?.[0]
@@ -112,7 +173,6 @@ const parsearFecha = (fecha: any) => {
   return new Date(fecha)
 }
 
-// Helper para colores de las prioridades en el historial
 const obtenerColorPrioridad = (prioridad: string) => {
   switch (prioridad?.toUpperCase()) {
     case 'CRITICA': return 'bg-red-950/60 border border-red-900 text-red-400'
@@ -132,6 +192,8 @@ onMounted(() => {
 
   const guardado = localStorage.getItem('relant_active_ticket_id')
   if (guardado) ticketIdActivo.value = guardado
+
+  cargarProyectosFirebase()
 })
 
 const toggleTema = () => {
@@ -139,7 +201,6 @@ const toggleTema = () => {
   localStorage.setItem('relant_theme', esModoOscuro.value ? 'oscuro' : 'claro')
 }
 
-// Helper para convertir fechas YYYY-MM-DD a formato visual DD/MM/YYYY
 const formatearFechaVisual = (fechaStr: string) => {
   if (!fechaStr) return ''
   const partes = fechaStr.split('-')
@@ -178,14 +239,9 @@ const ENVIAR_MENSAJE_CHAT = gql`
     enviarMensajeChat(ticketId: $ticketId, texto: $texto) { id chat }
   }
 `
-
-// 🎯 MUTACIÓN PARA CAMBIAR PRIORIDAD EN TIEMPO REAL
 const CAMBIAR_PRIORIDAD_MUTATION = gql`
   mutation CambiarPrioridad($ticketId: String!, $prioridad: String!) {
-    cambiarPrioridadTicket(ticketId: $ticketId, prioridad: $prioridad) {
-      id
-      prioridad
-    }
+    cambiarPrioridadTicket(ticketId: $ticketId, prioridad: $prioridad) { id prioridad }
   }
 `
 
@@ -198,7 +254,6 @@ const { mutate: apiCambiarPrioridad } = useMutation(CAMBIAR_PRIORIDAD_MUTATION)
 
 const esAdmin = computed(() => result.value?.me?.rol === 'ADMIN')
 
-// Función para procesar la actualización de prioridad desde el desplegable
 const ejecutarCambioPrioridad = async (ticketId: string, nuevaPrioridad: string) => {
   try {
     await apiCambiarPrioridad({ ticketId, prioridad: nuevaPrioridad })
@@ -208,7 +263,6 @@ const ejecutarCambioPrioridad = async (ticketId: string, nuevaPrioridad: string)
   }
 }
 
-// Lógica de filtrado común para reportes
 const obtenerTicketsFiltradosReporte = () => {
   const tickets = result.value?.misTickets || []
   const miIdPrisma = result.value?.me?.id || ''
@@ -228,7 +282,7 @@ const obtenerTicketsFiltradosReporte = () => {
   })
 }
 
-// --- 📊 EXPORTACIÓN A EXCEL ---
+// --- EXPORTAR EXCEL ---
 const descargarReporteExcel = () => {
   if (!fechaInicioReporte.value || !fechaFinReporte.value) {
     alert('❌ Por favor, seleccione el rango completo de fechas (Inicio y Fin).')
@@ -299,7 +353,7 @@ const descargarReporteExcel = () => {
   document.body.removeChild(enlaceDescarga)
 }
 
-// --- 📄 EXPORTACIÓN PDF ---
+// --- EXPORTAR PDF ---
 const descargarReportePdf = () => {
   if (!fechaInicioReporte.value || !fechaFinReporte.value) {
     alert('❌ Por favor, seleccione el rango completo de fechas (Inicio y Fin).')
@@ -368,7 +422,6 @@ const descargarReportePdf = () => {
       .header-table td { vertical-align: top; }
       .header-left { width: 56%; }
       .header-right { width: 44%; text-align: right; }
-      .logo-img { height: 40px; width: auto; display: block; margin-bottom: 4px; }
       .tagline { font-size: 9px; color: #9a9a9a; margin-top: 2px; margin-bottom: 14px; }
       .address { font-size: 11px; color: #222; line-height: 1.5; margin-bottom: 8px; }
       .doc-original { font-size: 11px; font-weight: 700; color: #333; margin-bottom: 4px; }
@@ -495,7 +548,6 @@ const descargarReportePdf = () => {
   }, 500)
 }
 
-// --- ⏱️ FUNCIÓN DE TIEMPOS SLA ---
 const convertirMinutosATexto = (totalMinutos: number): string => {
   if (totalMinutos <= 0) return "0 min"
   const MINUTOS_ANIO = 365 * 24 * 60
@@ -557,9 +609,11 @@ const manejarEnviarTicket = async () => {
     correoDestinatario.value = ''
     proyectoTicket.value = ''
     prioridadTicket.value = 'BAJA'
+    usarHitoManual.value = false
     archivoAdjuntoBase64.value = null
     if (fileInputRef.value) fileInputRef.value.value = ''
     refetch()
+    cargarProyectosFirebase()
   } catch (err: any) { alert('Error: ' + err.message) }
 }
 
@@ -634,6 +688,7 @@ const ejecutarDictamenAdmin = async (aprobado: boolean) => {
     comentarioAdmin.value = ''
     alert(aprobado ? '✓ Ticket liberado y archivado con éxito.' : '✕ Ticket rechazado y devuelto a desarrollo.')
     refetch()
+    cargarProyectosFirebase()
   } catch (e) {}
 }
 
@@ -677,10 +732,11 @@ const cerrarWorkspace = () => {
 
       <main class="flex-1 overflow-y-auto p-4 sm:p-8 space-y-6 sm:space-y-8 w-full max-w-7xl mx-auto">
         
-        <!-- 📱 WORKSPACE MODAL -->
+        <!-- WORKSPACE MODAL -->
         <div v-if="ticketActivoWorkspace" class="fixed inset-0 bg-zinc-950/80 backdrop-blur-md z-50 flex items-center justify-center p-0 sm:p-4">
           <div :class="esModoOscuro ? 'bg-zinc-900 border-zinc-800 text-white' : 'bg-white border-slate-200 text-slate-800'" class="border-0 sm:border rounded-none sm:rounded-3xl w-full max-w-5xl h-full sm:h-[85vh] flex flex-col overflow-hidden shadow-2xl animate-fadeIn">
             
+            <!-- CORREGIDO: bg-linear-to-r -->
             <div :class="esModoOscuro ? 'from-red-950/40 to-zinc-900 border-zinc-800' : 'from-red-50 to-slate-50 border-slate-200'" class="bg-linear-to-r p-4 sm:p-6 border-b flex justify-between items-center shrink-0">
               <div class="min-w-0 pr-2">
                 <span class="text-[10px] font-bold text-red-400 uppercase tracking-widest block">Mesa de Trabajo de Alta Prioridad</span>
@@ -738,20 +794,18 @@ const cerrarWorkspace = () => {
                   </div>
                 </div>
 
-                <!-- 🏃 ESTADO: EN DESARROLLO -->
                 <div v-if="ticketActivoWorkspace.estado === 'TRABAJANDO'" :class="esModoOscuro ? 'border-zinc-800' : 'border-slate-200'" class="space-y-3 pt-2 border-t shrink-0">
                   <div class="flex gap-2">
-                    <input v-model="notaProgresoActual" @keyup.enter="registrarProgresoEnCaliente" type="text" placeholder="Escribe un avance..." :class="esModoOscuro ? 'bg-zinc-900 border-zinc-800 text-white' : 'bg-white border-slate-200 text-slate-800'" class="rounded-xl px-3 py-2 text-xs flex-1 focus:outline-hidden" />
+                    <input v-model="notaProgresoActual" @keyup.enter="registrarProgresoEnCaliente" type="text" placeholder="Escribe un avance..." :class="esModoOscuro ? 'bg-zinc-900 border-zinc-800 text-white' : 'bg-white border-slate-200 text-slate-800'" class="rounded-xl px-3 py-2 text-xs flex-1 focus:outline-none" />
                     <button @click="registrarProgresoEnCaliente" class="bg-zinc-800 hover:bg-zinc-700 text-white font-bold text-xs px-3 py-2 rounded-xl cursor-pointer">➕ Log</button>
                   </div>
                   <button @click="despacharAuditoriaAdmin" class="w-full bg-red-700 hover:bg-red-800 text-white font-black text-xs uppercase tracking-widest py-2.5 rounded-xl shadow-md transition cursor-pointer">🏁 Enviar a Validación</button>
                 </div>
 
-                <!-- 🛡️ PANEL DE AUDITORÍA DE ADMINISTRACIÓN -->
                 <div v-if="ticketActivoWorkspace.estado === 'COMPLETADO' && esAdmin" :class="esModoOscuro ? 'border-zinc-800' : 'border-slate-200'" class="space-y-3 pt-2 border-t shrink-0 text-left">
                   <div>
                     <label class="text-[10px] uppercase font-bold text-zinc-400 block mb-1">Acta o Justificación del Dictamen (Obligatorio)</label>
-                    <input v-model="comentarioAdmin" type="text" placeholder="Escribe el porqué de la liberación o del rechazo..." :class="esModoOscuro ? 'bg-zinc-900 border-zinc-800 text-white' : 'bg-white border-slate-200 text-slate-800'" class="rounded-xl px-3 py-2 text-xs w-full focus:outline-hidden" />
+                    <input v-model="comentarioAdmin" type="text" placeholder="Escribe el porqué de la liberación o del rechazo..." :class="esModoOscuro ? 'bg-zinc-900 border-zinc-800 text-white' : 'bg-white border-slate-200 text-slate-800'" class="rounded-xl px-3 py-2 text-xs w-full focus:outline-none" />
                   </div>
                   <div class="grid grid-cols-2 gap-2">
                     <button @click="ejecutarDictamenAdmin(true)" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs py-2.5 rounded-xl cursor-pointer">✓ Aprobar y Liberar</button>
@@ -759,7 +813,6 @@ const cerrarWorkspace = () => {
                   </div>
                 </div>
 
-                <!-- ⏳ MENSAJE DE ESPERA PARA USUARIOS REGULARES -->
                 <div v-if="ticketActivoWorkspace.estado === 'COMPLETADO' && !esAdmin" :class="esModoOscuro ? 'bg-zinc-900/60 border-zinc-800' : 'bg-slate-100 border-slate-200 text-slate-600'" class="p-3 rounded-xl border border-dashed text-center shrink-0">
                   <span class="text-xs font-bold tracking-wider block">⏳ Requerimiento Bloqueado</span>
                   <p class="text-[11px] mt-0.5">Bajo auditoría del cuerpo de administración.</p>
@@ -770,7 +823,7 @@ const cerrarWorkspace = () => {
           </div>
         </div>
 
-        <!-- EXPORTAR REPORTES (AHORA REORGANIZADO PARA INCORPORAR EXCEL Y PDF PARALELOS) -->
+        <!-- EXPORTAR REPORTES -->
         <div :class="esModoOscuro ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-slate-200'" class="w-full rounded-2xl border shadow-md overflow-hidden text-left">
           <div :class="esModoOscuro ? 'border-zinc-800 bg-zinc-950/40' : 'border-slate-200 bg-slate-50/50'" class="p-3 sm:p-4 border-b flex items-center justify-between">
             <h3 class="text-xs font-black tracking-wider uppercase">📊 Exportar Reporte Operacional</h3>
@@ -778,11 +831,11 @@ const cerrarWorkspace = () => {
           <div class="p-4 sm:p-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
             <div class="flex flex-col space-y-1">
               <label class="text-[10px] font-black text-zinc-400 uppercase tracking-wider">Fecha de Inicio:</label>
-              <input v-model="fechaInicioReporte" type="date" :class="esModoOscuro ? 'bg-zinc-950 border-zinc-800 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'" class="p-2.5 text-xs rounded-xl border focus:outline-hidden" />
+              <input v-model="fechaInicioReporte" type="date" :class="esModoOscuro ? 'bg-zinc-950 border-zinc-800 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'" class="p-2.5 text-xs rounded-xl border focus:outline-none" />
             </div>
             <div class="flex flex-col space-y-1">
               <label class="text-[10px] font-black text-zinc-400 uppercase tracking-wider">Fecha de Fin:</label>
-              <input v-model="fechaFinReporte" type="date" :class="esModoOscuro ? 'bg-zinc-950 border-zinc-800 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'" class="p-2.5 text-xs rounded-xl border focus:outline-hidden" />
+              <input v-model="fechaFinReporte" type="date" :class="esModoOscuro ? 'bg-zinc-950 border-zinc-800 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'" class="p-2.5 text-xs rounded-xl border focus:outline-none" />
             </div>
             <button @click="descargarReporteExcel" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs uppercase tracking-widest py-3 rounded-xl cursor-pointer shadow-md transition-all">
               📥 Descargar Excel
@@ -793,16 +846,17 @@ const cerrarWorkspace = () => {
           </div>
         </div>
 
-        <!-- GENERAR REQUERIMIENTO -->
+        <!-- GENERAR REQUERIMIENTO CON PROYECTOS E HITOS DINÁMICOS -->
         <div :class="esModoOscuro ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-slate-200'" class="w-full rounded-2xl border shadow-md overflow-hidden text-left">
           <div class="bg-red-700 p-3 sm:p-4 text-white">
             <h3 class="text-xs font-black tracking-wider uppercase">Generar Requerimiento Dirigido</h3>
           </div>
           <form @submit.prevent="manejarEnviarTicket" class="p-4 sm:p-6 space-y-4">
+            
             <div :class="esModoOscuro ? 'border-zinc-800' : 'border-slate-200'" class="flex items-center border-b pb-2 relative">
               <label class="w-12 sm:w-16 text-xs font-bold text-zinc-400 uppercase">Para:</label>
               <div class="flex-1 relative">
-                <input v-model="correoDestinatario" type="text" @focus="mostrarSugerencias = true" @blur="ocultarSugerenciasConRetraso" :class="esModoOscuro ? 'bg-transparent text-white placeholder-zinc-600' : 'bg-transparent text-slate-900 placeholder-slate-400'" class="w-full text-sm focus:outline-hidden" placeholder="correo@relant.com o Usuario" />
+                <input v-model="correoDestinatario" type="text" @focus="mostrarSugerencias = true" @blur="ocultarSugerenciasConRetraso" :class="esModoOscuro ? 'bg-transparent text-white placeholder-zinc-600' : 'bg-transparent text-slate-900 placeholder-slate-400'" class="w-full text-sm focus:outline-none" placeholder="correo@relant.com o Usuario" />
                 <div v-if="mostrarSugerencias && usuariosSugeridos.length > 0" :class="esModoOscuro ? 'bg-zinc-900 border-zinc-800 text-white' : 'bg-white border-slate-200 text-slate-800'" class="absolute left-0 right-0 top-full mt-1 border rounded-xl shadow-2xl max-h-48 overflow-y-auto z-50 divide-y divide-zinc-800">
                   <div v-for="usuario in usuariosSugeridos" :key="usuario.id" @mousedown="seleccionarUsuarioSugerido(usuario)" class="p-2.5 text-xs cursor-pointer hover:bg-zinc-800/60 transition-colors flex flex-col">
                     <span class="font-bold">{{ usuario.nombre }}</span>
@@ -815,22 +869,73 @@ const cerrarWorkspace = () => {
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 border-b pb-3" :class="esModoOscuro ? 'border-zinc-800' : 'border-slate-200'">
               <div class="flex items-center">
                 <label class="w-12 sm:w-16 text-xs font-bold text-zinc-400 uppercase">Prioridad:</label>
-                <select v-model="prioridadTicket" :class="esModoOscuro ? 'bg-zinc-950 border-zinc-800 text-white' : 'bg-white border-slate-200 text-slate-800'" class="flex-1 text-xs p-2 rounded-xl border focus:outline-hidden cursor-pointer">
+                <select v-model="prioridadTicket" :class="esModoOscuro ? 'bg-zinc-950 border-zinc-800 text-white' : 'bg-white border-slate-200 text-slate-800'" class="flex-1 text-xs p-2.5 rounded-xl border focus:outline-none cursor-pointer font-bold">
                   <option value="BAJA">🟢 BAJA</option>
                   <option value="MEDIA">🔵 MEDIA</option>
                   <option value="ALTA">🟡 ALTA</option>
                   <option value="CRITICA">🔴 CRÍTICA</option>
                 </select>
               </div>
+
               <div class="flex items-center">
                 <label class="w-12 sm:w-16 text-xs font-bold text-zinc-400 uppercase">Proyecto:</label>
-                <input v-model="proyectoTicket" type="text" :class="esModoOscuro ? 'bg-zinc-950 border-zinc-800 text-white' : 'bg-white border-slate-200 text-slate-800'" class="flex-1 text-xs p-2 rounded-xl border focus:outline-hidden" placeholder="Ej. Marketplace, Kanban, ERP" />
+                <select 
+                  v-model="proyectoTicket" 
+                  :class="esModoOscuro ? 'bg-zinc-950 border-zinc-800 text-white' : 'bg-white border-slate-200 text-slate-800'" 
+                  class="flex-1 text-xs p-2.5 rounded-xl border focus:outline-none cursor-pointer font-bold truncate"
+                >
+                  <option value="">📂 General / Sin Proyecto</option>
+                  <option v-if="cargandoProyectos" disabled>⏳ Cargando proyectos...</option>
+                  <option v-else v-for="nombreProj in listaProyectos" :key="nombreProj" :value="nombreProj">
+                    📁 {{ nombreProj }}
+                  </option>
+                </select>
               </div>
             </div>
 
-            <div :class="esModoOscuro ? 'border-zinc-800' : 'border-slate-200'" class="flex items-center border-b pb-2">
+            <!-- 🎯 ASUNTO / HITO DESPLEGABLE DE FIREBASE -->
+            <div :class="esModoOscuro ? 'border-zinc-800' : 'border-slate-200'" class="flex flex-col sm:flex-row sm:items-center border-b pb-2 gap-2">
               <label class="w-12 sm:w-16 text-xs font-bold text-zinc-400 uppercase">Asunto:</label>
-              <input v-model="asuntoTicket" type="text" required :class="esModoOscuro ? 'bg-transparent text-white font-bold' : 'bg-transparent text-slate-900 font-bold'" class="w-full text-sm focus:outline-hidden" placeholder="Folio o incidencia" />
+              
+              <div v-if="hitosDelProyectoSeleccionado.length > 0 && !usarHitoManual" class="flex-1 flex gap-2 items-center">
+                <select 
+                  v-model="asuntoTicket" 
+                  required 
+                  :class="esModoOscuro ? 'bg-zinc-950 border-zinc-800 text-white' : 'bg-white border-slate-200 text-slate-800'" 
+                  class="flex-1 text-xs p-2.5 rounded-xl border focus:outline-none font-bold cursor-pointer"
+                >
+                  <option value="" disabled>-- Selecciona un hito del proyecto --</option>
+                  <option v-for="hito in hitosDelProyectoSeleccionado" :key="hito.id" :value="hito.title">
+                    {{ hito.completed ? '✅' : '⏳' }} {{ hito.title }} {{ hito.completed ? '(Completado)' : '(Pendiente)' }}
+                  </option>
+                </select>
+                <button 
+                  type="button" 
+                  @click="usarHitoManual = true; asuntoTicket = ''" 
+                  class="text-[11px] font-bold text-red-400 hover:text-red-300 underline whitespace-nowrap px-2 cursor-pointer"
+                >
+                  ✏️ Escribir otro
+                </button>
+              </div>
+
+              <div v-else class="flex-1 flex gap-2 items-center">
+                <input 
+                  v-model="asuntoTicket" 
+                  type="text" 
+                  required 
+                  :class="esModoOscuro ? 'bg-transparent text-white font-bold' : 'bg-transparent text-slate-900 font-bold'" 
+                  class="flex-1 text-sm focus:outline-none" 
+                  placeholder="Título del hito o incidencia" 
+                />
+                <button 
+                  v-if="hitosDelProyectoSeleccionado.length > 0" 
+                  type="button" 
+                  @click="usarHitoManual = false; asuntoTicket = ''" 
+                  class="text-[11px] font-bold text-blue-400 hover:text-blue-300 underline whitespace-nowrap px-2 cursor-pointer"
+                >
+                  📋 Ver lista de hitos
+                </button>
+              </div>
             </div>
             
             <div :class="esModoOscuro ? 'border-zinc-800' : 'border-slate-200'" class="flex items-center border-b pb-3">
@@ -838,8 +943,13 @@ const cerrarWorkspace = () => {
               <input type="file" ref="fileInputRef" @change="manejarSubidaArchivo" accept="image/*,.pdf,.doc,.docx" class="text-xs text-zinc-400 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold cursor-pointer w-full" />
             </div>
 
-            <textarea v-model="cuerpoTicket" rows="3" required :class="esModoOscuro ? 'bg-zinc-950 border-zinc-800 text-white ' : 'bg-slate-50 border-slate-200'" class="w-full p-3 sm:p-4 text-sm rounded-xl border focus:outline-hidden" placeholder="Especificaciones técnicas..."></textarea>
-            <div class="flex justify-end"><button type="submit" class="w-full sm:w-auto bg-red-700 hover:bg-red-800 text-white font-black text-xs uppercase tracking-widest px-6 py-2.5 rounded-xl cursor-pointer">Despachar Ticket</button></div>
+            <textarea v-model="cuerpoTicket" rows="3" required :class="esModoOscuro ? 'bg-zinc-950 border-zinc-800 text-white ' : 'bg-slate-50 border-slate-200'" class="w-full p-3 sm:p-4 text-sm rounded-xl border focus:outline-none" placeholder="Especificaciones técnicas..."></textarea>
+            
+            <div class="flex justify-end">
+              <button type="submit" class="w-full sm:w-auto bg-red-700 hover:bg-red-800 text-white font-black text-xs uppercase tracking-widest px-6 py-2.5 rounded-xl cursor-pointer shadow-md">
+                Despachar Ticket
+              </button>
+            </div>
           </form>
         </div>
 
@@ -854,7 +964,7 @@ const cerrarWorkspace = () => {
               {{ opcion.texto }}
             </button>
           </div>
-          <input v-model="busquedaQuery" type="text" placeholder="Buscar folio..." :class="esModoOscuro ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-slate-100 border-slate-200'" class="px-4 py-2 text-xs rounded-xl focus:outline-hidden w-full lg:w-64" />
+          <input v-model="busquedaQuery" type="text" placeholder="Buscar folio..." :class="esModoOscuro ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-slate-100 border-slate-200'" class="px-4 py-2 text-xs rounded-xl focus:outline-none w-full lg:w-64" />
         </div>
 
         <!-- LISTADO DE TICKETS -->
@@ -868,18 +978,18 @@ const cerrarWorkspace = () => {
             <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 border-b pb-3" :class="esModoOscuro ? 'border-zinc-800' : 'border-slate-200'">
               <div class="flex flex-wrap items-center gap-2 text-[11px] sm:text-xs min-w-0">
                 <span class="font-mono font-bold px-2 py-0.5 rounded-md border shrink-0" :class="esModoOscuro ? 'bg-zinc-950 text-zinc-300 border-zinc-800' : 'bg-slate-100 text-slate-800 border-slate-200'">{{ 'RLN-' + ticket.id.substring(0,6).toUpperCase() }}</span>
+                
                 <span class="font-semibold px-2 py-0.5 rounded-md border truncate max-w-full" :class="esModoOscuro ? 'bg-zinc-950/60 border-zinc-800 text-zinc-400' : 'bg-slate-50 border-slate-200 text-slate-600'">
-                  📩 De: <strong class="text-red-500" :title="ticket.creador?.email ?? ''">{{ ticket.creador?.nombre || 'Mesa' }}</strong>
+                  📩 De: <strong class="text-red-500" :title="ticket.creador?.email ?? ''">{{ ticket.creador?.nombre || ticket.creador?.email || 'Mesa' }}</strong>
                   <span class="text-zinc-600 font-black mx-0.5">➡️</span>
-                  👤 Para: <strong class="text-amber-500" :title="ticket.asignado?.email ?? ''">{{ ticket.asignado?.nombre || 'Nadie' }}</strong>
+                  👤 Para: <strong class="text-amber-500" :title="ticket.asignado?.email ?? ''">{{ ticket.asignado?.nombre || ticket.asignado?.email || 'Sin Asignar' }}</strong>
                 </span>
                 
-                <!-- 🎯 SELECTOR INTERACTIVO DE PRIORIDAD EN VIVO -->
                 <select 
                   :value="ticket.prioridad || 'BAJA'" 
                   @change="(e) => ejecutarCambioPrioridad(ticket.id, (e.target as HTMLSelectElement).value)"
                   :class="obtenerColorPrioridad(ticket.prioridad)" 
-                  class="px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider cursor-pointer focus:outline-hidden transition-colors border"
+                  class="px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider cursor-pointer focus:outline-none transition-colors border"
                 >
                   <option value="BAJA" class="bg-zinc-900 text-zinc-300">🟢 BAJA</option>
                   <option value="MEDIA" class="bg-zinc-900 text-blue-400">🔵 MEDIA</option>
@@ -901,6 +1011,8 @@ const cerrarWorkspace = () => {
               <div class="shrink-0 flex gap-2 w-full md:w-auto">
                 <button v-if="ticket.estado === 'RECIBIDO'" @click="activarProcesamientoTicket(ticket)" class="bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold px-4 py-2.5 rounded-xl transition cursor-pointer w-full md:w-auto">🛠️ Procesar Requerimiento</button>
                 <button v-if="ticket.estado === 'TRABAJANDO'" @click="ticketIdActivo = ticket.id" class="bg-red-700 hover:bg-red-800 text-white text-xs font-bold px-4 py-2.5 rounded-xl transition cursor-pointer w-full md:w-auto">💼 Abrir Panel / Chat</button>
+                
+                <!-- CORREGIDO: bg-linear-to-r -->
                 <button v-if="ticket.estado === 'COMPLETADO'" @click="ticketIdActivo = ticket.id" class="bg-linear-to-r from-red-950 to-zinc-900 border border-red-900/40 text-red-400 text-xs font-black px-4 py-2.5 rounded-xl transition cursor-pointer w-full md:w-auto">{{ esAdmin ? '🛡️ Auditar Folio' : '⏳ En Revisión' }}</button>
                 <button v-if="ticket.estado === 'APROBADO'" @click="ticketIdActivo = ticket.id" class="text-xs font-bold tracking-wider uppercase px-4 py-2.5 rounded-xl border border-dashed border-zinc-800 text-zinc-400 hover:text-zinc-200 cursor-pointer w-full md:w-auto">🔒 Liberado (Ver Chat)</button>
                 

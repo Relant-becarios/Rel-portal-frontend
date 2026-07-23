@@ -1,75 +1,99 @@
 <script setup lang="ts">
+import { useRouter } from 'vue-router'
 import { auth } from '../firebase'
 import { signOut } from 'firebase/auth'
-import { useRouter, useRoute } from 'vue-router'
 
 defineProps<{
-  dark: boolean
+  dark?: boolean
 }>()
 
 const router = useRouter()
-const route = useRoute()
+const usuarioActual = auth.currentUser
 
-const manejarCerrarSesion = async () => {
-  await signOut(auth)
-  router.push('/login')
+const cerrarSesion = async () => {
+  try {
+    await signOut(auth)
+    router.push('/login')
+  } catch (error) {
+    console.error('Error al cerrar sesión:', error)
+  }
 }
 </script>
 
 <template>
-  <aside :class="dark ? 'bg-zinc-900 border-red-950/50 text-zinc-400' : 'bg-white border-slate-200 text-slate-500'" 
-         class="w-64 flex flex-col justify-between shrink-0 border-r transition-colors duration-200">
-    <div>
-      <div :class="dark ? 'border-red-950/30 bg-zinc-950/40' : 'border-slate-100 bg-slate-50/50'" class="h-16 flex items-center px-6 border-b">
-        <div class="w-7 h-7 bg-red-700 rounded-lg flex items-center justify-center text-white font-black text-sm mr-3">R</div>
-        <span :class="dark ? 'text-white' : 'text-slate-800'" class="font-bold text-base tracking-wide">Relant Portal</span>
-      </div>
+  <aside 
+    :class="dark ? 'bg-zinc-900 border-zinc-800 text-zinc-100' : 'bg-white border-slate-200 text-slate-800'"
+    class="w-64 h-screen border-r flex flex-col justify-between p-4 shrink-0 select-none font-sans"
+  >
+    <!-- 🔝 SECCIÓN SUPERIOR: LOGO Y BOTONES -->
+    <div class="space-y-6">
       
-      <nav class="p-4 space-y-1">
-        <router-link to="/home" 
-          :class="route.path === '/home' 
-            ? 'bg-red-700 text-white font-semibold shadow-md shadow-red-700/10' 
-            : (dark ? 'hover:bg-zinc-800 hover:text-white' : 'hover:bg-slate-100 text-slate-700')" 
-          class="flex items-center space-x-3 px-4 py-2.5 rounded-xl text-sm transition font-medium">
-          <span>🏠</span> <span>Inicio</span>
+      <!-- Logo Relant -->
+      <div class="flex items-center space-x-3 px-2 pt-2">
+        <div class="w-8 h-8 bg-red-700 rounded-xl flex items-center justify-center font-black text-white text-lg shadow-md">
+          R
+        </div>
+        <span class="font-black tracking-tight text-base">Relant Portal</span>
+      </div>
+
+      <!-- 📂 MENÚ DE NAVEGACIÓN -->
+      <nav class="space-y-1.5">
+        <router-link 
+          to="/home" 
+          class="flex items-center space-x-3 px-4 py-3 rounded-xl transition text-xs font-bold"
+          :class="dark ? 'text-zinc-400 hover:text-white hover:bg-zinc-800/80' : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'"
+          active-class="bg-red-700 !text-white font-black shadow-lg"
+        >
+          <span class="text-base">🏠</span>
+          <span>Inicio</span>
         </router-link>
-        
-        <router-link to="/tickets" 
-          :class="route.path === '/tickets' 
-            ? 'bg-red-700 text-white font-semibold shadow-md shadow-red-700/10' 
-            : (dark ? 'hover:bg-zinc-800 hover:text-white' : 'hover:bg-slate-100 text-slate-700')" 
-          class="flex items-center space-x-3 px-4 py-2.5 rounded-xl text-sm transition font-medium">
-          <span>🎫</span> <span>Tickets</span>
+
+        <router-link 
+          to="/tickets" 
+          class="flex items-center space-x-3 px-4 py-3 rounded-xl transition text-xs font-bold"
+          :class="dark ? 'text-zinc-400 hover:text-white hover:bg-zinc-800/80' : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'"
+          active-class="bg-red-700 !text-white font-black shadow-lg"
+        >
+          <span class="text-base">🎫</span>
+          <span>Tickets</span>
         </router-link>
+
+        <a 
+          href="https://relantapi.netlify.app/" 
+          target="_blank" 
+          rel="noopener noreferrer"
+          class="flex items-center space-x-3 px-4 py-3 rounded-xl transition text-xs font-bold"
+          :class="dark ? 'text-zinc-400 hover:text-white hover:bg-zinc-800/80' : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'"
+        >
+          <span class="text-base">🌐</span>
+          <span class="flex-1">Relant API</span>
+          <span class="text-[9px] bg-red-950/80 border border-red-900/60 text-red-400 px-1.5 py-0.5 rounded font-mono">EXT ↗</span>
+        </a>
       </nav>
     </div>
 
-<a 
-  href="https://relantapi.netlify.app/" 
-  target="_blank" 
-  rel="noopener noreferrer"
-  class="flex items-center space-x-3 px-4 py-3 rounded-xl transition text-xs font-bold text-zinc-400 hover:text-white hover:bg-zinc-800/80 group"
->
-  <span class="text-base group-hover:scale-110 transition-transform">🌐</span>
-  <span>Gestor de Proyectos</span>
-  <span class="text-[9px] bg-red-950 border border-red-900 text-red-400 px-1.5 py-0.5 rounded font-mono ml-auto">
-    EXT ↗
-  </span>
-</a>
-    
-    <div :class="dark ? 'border-red-950/30 bg-zinc-950/20' : 'border-slate-100 bg-slate-50/50'" class="p-4 border-t flex flex-col space-y-3">
-      <div class="flex items-center space-x-3">
-        <div class="w-9 h-9 rounded-lg bg-red-700/10 text-red-400 flex items-center justify-center font-bold text-sm border border-red-700/20 uppercase">
-          {{ auth.currentUser?.email?.substring(0,2) }}
+    <!-- 🔻 SECCIÓN INFERIOR: USUARIO Y CERRAR SESIÓN -->
+    <div class="space-y-3 border-t pt-4" :class="dark ? 'border-zinc-800' : 'border-slate-100'">
+      <div class="flex items-center space-x-3 p-2 rounded-xl" :class="dark ? 'bg-zinc-950/60 border border-zinc-800/80' : 'bg-slate-50 border border-slate-200'">
+        <div class="w-8 h-8 rounded-lg bg-red-950/80 border border-red-900/60 text-red-400 flex items-center justify-center text-xs font-black shrink-0">
+          {{ usuarioActual?.email ? usuarioActual.email.substring(0, 2).toUpperCase() : 'OP' }}
         </div>
-        <div class="truncate max-w-37.5">
-          <p :class="dark ? 'text-white' : 'text-slate-800'" class="text-xs font-semibold truncate">{{ auth.currentUser?.email }}</p>
-          <p class="text-[10px] text-red-400 font-bold uppercase tracking-wider">Operador Activo</p>
+        <div class="min-w-0 flex-1">
+          <p class="text-[11px] font-bold truncate" :class="dark ? 'text-zinc-200' : 'text-slate-800'" :title="usuarioActual?.email || ''">
+            {{ usuarioActual?.email || 'operador@relant.com' }}
+          </p>
+          <span class="text-[9px] font-black uppercase text-red-500 tracking-wider block">OPERADOR ACTIVO</span>
         </div>
       </div>
-      <button @click="manejarCerrarSesion" :class="dark ? 'bg-zinc-800 text-zinc-300 hover:bg-red-950 hover:text-red-400' : 'bg-slate-100 text-slate-600 hover:bg-red-50 hover:text-red-600'" class="w-full text-xs font-bold py-2 rounded-lg transition text-center cursor-pointer">
+
+      <button 
+        @click="cerrarSesion"
+        class="w-full py-2.5 px-4 rounded-xl text-xs font-bold transition cursor-pointer text-center"
+        :class="dark ? 'bg-zinc-800 hover:bg-zinc-700 text-zinc-300' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'"
+      >
         Desconectar Sistema
       </button>
     </div>
+
   </aside>
 </template>
