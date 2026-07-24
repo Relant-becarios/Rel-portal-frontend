@@ -677,29 +677,38 @@ const ejecutarDictamenAdmin = async (aprobado: boolean) => {
     alert('❌ Es obligatorio ingresar un comentario o acta de dictamen.')
     return
   }
-  try {
-    // 1. Mutación a GraphQL
-    await apiEvaluar({
-      ticketId: ticketIdActivo.value,
-      aprobado,
-      comentario: comentarioAdmin.value.trim()
-    })
-    
-    // 2. Limpiar modal
-    localStorage.removeItem('relant_active_ticket_id')
-    ticketIdActivo.value = null
-    comentarioAdmin.value = ''
 
-    // 3. ⚡ Sincronizar GraphQL y Firebase ANTES de la alerta
+  // 1. Guardamos los datos antes de limpiar el estado
+  const currentTicketId = ticketIdActivo.value
+  const comentario = comentarioAdmin.value.trim()
+
+  // 2. Cerramos la ventana modal de inmediato en la interfaz
+  ticketIdActivo.value = null
+  comentarioAdmin.value = ''
+  localStorage.removeItem('relant_active_ticket_id')
+
+  try {
+    // 3. Ejecutamos la mutación en GraphQL
+    await apiEvaluar({
+      ticketId: currentTicketId,
+      aprobado,
+      comentario
+    })
+
+    // 4. Actualizamos la lista de tickets y proyectos
     await Promise.all([
       refetch(),
       cargarProyectosFirebase()
     ])
 
-    // 4. Mensaje al usuario
     alert(aprobado ? '✓ Ticket liberado y archivado con éxito.' : '✕ Ticket rechazado y devuelto a desarrollo.')
   } catch (e: any) {
-    alert('Error al evaluar el ticket: ' + e.message)
+    console.error('Error al evaluar el ticket:', e)
+    alert('⚠️ Error al evaluar el ticket: ' + (e.message || 'Error desconocido'))
+    
+    // Si la petición falla, reabrimos el modal para que no se pierda la información
+    ticketIdActivo.value = currentTicketId
+    comentarioAdmin.value = comentario
   }
 }
 
