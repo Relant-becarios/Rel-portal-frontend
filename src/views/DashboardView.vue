@@ -12,13 +12,14 @@ const obtenerFechaHoyLocal = () => {
   return `${anio}-${mes}-${dia}`
 }
 
+// --- ESTADOS DE CONTROL DE FLUJO ---
 const filtroEstado = ref('TODOS')
 const esModoOscuro = ref(true)
 const comentarioAdmin = ref('')
 const busquedaQuery = ref('')
 const menuMovilAbierto = ref(false)
 
-// Campos del nuevo ticket
+// --- VARIABLES DE NUEVO TICKET ---
 const correoDestinatario = ref('')
 const asuntoTicket = ref('')
 const cuerpoTicket = ref('')
@@ -28,6 +29,7 @@ const prioridadTicket = ref('BAJA')
 const proyectoTicket = ref('')
 const usarHitoManual = ref(false)
 
+// --- 📂 ESTRUCTURA DE PROYECTOS E HITOS DESDE FIREBASE ---
 interface Hito { id: string; title: string; completed: boolean }
 interface ProyectoFirebase { id: string; name: string; status: string; tasks: Hito[] }
 
@@ -60,7 +62,7 @@ const cargarProyectosFirebase = async () => {
       listaProyectos.value = Array.from(new Set(nombres))
     }
   } catch (err) {
-    console.error('Error al consultar Firebase:', err)
+    console.error('Error al consultar proyectos en Firebase:', err)
   } finally {
     cargandoProyectos.value = false
   }
@@ -121,7 +123,7 @@ const ocultarSugerenciasConRetraso = () => {
   setTimeout(() => { mostrarSugerencias.value = false }, 200)
 }
 
-// 📦 PROCESAR MÚLTIPLES ARCHIVOS SIN RESTRICCIÓN DE FORMATO (.ZIP, .PDF, .DOCX, ETC.)
+// 📦 PROCESAR MÚLTIPLES ARCHIVOS HASTA 200MB CADA UNO
 const manejarSubidaArchivosMultiples = (event: Event) => {
   const target = event.target as HTMLInputElement
   const files = target.files
@@ -130,8 +132,9 @@ const manejarSubidaArchivosMultiples = (event: Event) => {
   listaArchivosBase64.value = []
 
   Array.from(files).forEach((file) => {
-    if (file.size > 10 * 1024 * 1024) {
-      alert(`⚠️ El archivo "${file.name}" supera el límite de 10MB.`)
+    // ⚡ LÍMITE DE 200MB POR ARCHIVO
+    if (file.size > 200 * 1024 * 1024) {
+      alert(`⚠️ El archivo "${file.name}" supera el límite de 200MB.`)
       return
     }
 
@@ -176,7 +179,14 @@ const toggleTema = () => {
   localStorage.setItem('relant_theme', esModoOscuro.value ? 'oscuro' : 'claro')
 }
 
-// 🔒 GRAPHQL QUERIES / MUTATIONS
+const formatearFechaVisual = (fechaStr: string) => {
+  if (!fechaStr) return ''
+  const partes = fechaStr.split('-')
+  if (partes.length === 3) return `${partes[2]}/${partes[1]}/${partes[0]}`
+  return fechaStr
+}
+
+// 🔒 GRAPHQL API CENTRAL
 const OBTENER_DATOS_DASHBOARD = gql`
   query GetDashboardData {
     me { id nombre email rol }
@@ -229,6 +239,103 @@ const ejecutarCambioPrioridad = async (ticketId: string, nuevaPrioridad: string)
   } catch (err: any) { alert('Error: ' + err.message) }
 }
 
+const obtenerTicketsFiltradosReporte = () => {
+  const tickets = result.value?.misTickets || []
+  const miIdPrisma = result.value?.me?.id || ''
+  const soyAdmin = esAdmin.value
+
+  let baseTickets = [...tickets]
+  if (!soyAdmin) {
+    baseTickets = baseTickets.filter((t: any) => t.asignadoId === miIdPrisma || t.creadorId === miIdPrisma)
+  }
+
+  const inicioDate = new Date(fechaInicioReporte.value + 'T00:00:00')
+  const finDate = new Date(fechaFinReporte.value + 'T23:59:59')
+
+  return baseTickets.filter((t: any) => {
+    const fechaTicket = parsearFecha(t.fecha_recibido)
+    return fechaTicket && fechaTicket >= inicioDate && fechaTicket <= finDate
+  })
+}
+
+// 📊 EXPORTAR EXCEL
+const descargarReporteExcel = () => {
+  if (!fechaInicioReporte.value || !fechaFinReporte.value) {
+    alert('❌ Por favor, seleccione el rango completo de fechas.')
+    return
+  }
+
+  const filtradosPorFecha = obtenerTicketsFiltradosReporte()
+  if (filtradosPorFecha.length === 0) {
+    alert('⚠️ No se encontraron requerimientos registrados dentro del rango de fechas.')
+    return
+  }
+
+  let tablaHtml = `
+    <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
+    <head><meta charset="utf-8" /></head>
+    <body>
+      <table>
+        <thead>
+          <tr>
+            <th>ID Folio</th><th>Título</th><th>Descripción</th><th>Prioridad</th><th>Proyecto</th><th>Estado</th><th>Fecha Recibido</th><th>Creador</th><th>Operador Asignado</th>
+          </tr>
+        </thead>
+        <tbody>
+  `
+
+  filtradosPorFecha.forEach((t: any) => {
+    const folio = 'RLN-' + t.id.substring(0, 6).toUpperCase()
+    tablaHtml += `
+      <tr>
+        <td>${folio}</td><td>${t.titulo || ''}</td><td>${t.descripcion || ''}</td><td>${t.prioridad || 'BAJA'}</td><td>${t.proyecto || 'General'}</td><td>${t.estado || ''}</td><td>${parsearFecha(t.fecha_recibido)?.toLocaleString() || ''}</td><td>${t.creador?.nombre || t.creador?.email || 'Mesa Central'}</td><td>${t.asignado?.nombre || t.asignado?.email || 'Sin Asignar'}</td>
+      </tr>
+    `
+  })
+
+  tablaHtml += `</tbody></table></body></html>`
+  const blob = new Blob([tablaHtml], { type: 'application/vnd.ms-excel;charset=utf-8;' })
+  const enlace = document.createElement('a')
+  enlace.href = URL.createObjectURL(blob)
+  enlace.download = `Reporte_Relant_Tickets_${fechaInicioReporte.value}_a_${fechaFinReporte.value}.xls`
+  enlace.click()
+}
+
+// 📄 EXPORTAR PDF
+const descargarReportePdf = () => {
+  if (!fechaInicioReporte.value || !fechaFinReporte.value) {
+    alert('❌ Por favor, seleccione el rango completo de fechas.')
+    return
+  }
+
+  const filtradosPorFecha = obtenerTicketsFiltradosReporte()
+  if (filtradosPorFecha.length === 0) {
+    alert('⚠️ No se encontraron requerimientos registrados dentro del rango de fechas.')
+    return
+  }
+
+  const periodoVisual = `${formatearFechaVisual(fechaInicioReporte.value)} – ${formatearFechaVisual(fechaFinReporte.value)}`
+  let itemsHtml = ''
+  
+  filtradosPorFecha.forEach((t: any, index: number) => {
+    const folio = 'RLN-' + t.id.substring(0, 6).toUpperCase()
+    itemsHtml += `
+      <div style="margin-bottom: 15px; border-bottom: 1px solid #ccc; padding-bottom: 10px;">
+        <strong>#${index + 1} ${folio} - ${t.titulo}</strong> (${t.estado})<br>
+        <small>De: ${t.creador?.nombre || 'Mesa'} | Para: ${t.asignado?.nombre || 'Sin asignar'} | Fecha: ${parsearFecha(t.fecha_recibido)?.toLocaleString()}</small>
+        <p style="margin: 5px 0;">${t.descripcion}</p>
+      </div>
+    `
+  })
+
+  const doc = window.open('', '', 'width=800,height=600')
+  if (doc) {
+    doc.document.write(`<html><head><title>Reporte de Tickets</title></head><body style="font-family:sans-serif; padding:20px;"><h2>Reporte de Tickets RELANT</h2><p>Periodo: ${periodoVisual}</p><hr>${itemsHtml}</body></html>`)
+    doc.document.close()
+    doc.print()
+  }
+}
+
 const manejarEnviarTicket = async () => {
   if (!asuntoTicket.value || !cuerpoTicket.value) return
 
@@ -278,7 +385,7 @@ const ticketsFiltradosConPrivacidad = computed(() => {
 
   if (busquedaQuery.value) {
     const query = busquedaQuery.value.toLowerCase()
-    filtrados = filtrados.filter((t: any) => t.titulo?.toLowerCase().includes(query) || t.descripcion?.toLowerCase().includes(query))
+    filtrados = filtrados.filter((t: any) => t.titulo?.toLowerCase().includes(query) || t.descripcion?.toLowerCase().includes(query) || t.id?.toLowerCase().includes(query))
   }
 
   return filtrados
@@ -370,7 +477,7 @@ const cerrarWorkspace = () => {
 
       <main class="flex-1 overflow-y-auto p-4 sm:p-8 space-y-6 sm:space-y-8 w-full max-w-7xl mx-auto">
         
-        <!-- WORKSPACE MODAL CON VISUALIZADOR DE MÚLTIPLES ARCHIVOS -->
+        <!-- WORKSPACE MODAL -->
         <div v-if="ticketActivoWorkspace" class="fixed inset-0 bg-zinc-950/80 backdrop-blur-md z-50 flex items-center justify-center p-0 sm:p-4">
           <div :class="esModoOscuro ? 'bg-zinc-900 border-zinc-800 text-white' : 'bg-white border-slate-200 text-slate-800'" class="border-0 sm:border rounded-none sm:rounded-3xl w-full max-w-5xl h-full sm:h-[85vh] flex flex-col overflow-hidden shadow-2xl">
             
@@ -405,7 +512,7 @@ const cerrarWorkspace = () => {
                   <p class="text-sm whitespace-pre-line mt-1 p-3 sm:p-4 rounded-xl border bg-zinc-900/40 border-zinc-800/40 text-zinc-300 leading-relaxed max-h-40 overflow-y-auto">{{ ticketActivoWorkspace.descripcion }}</p>
                 </div>
 
-                <!-- 📎 RENDERIZADOR DE MÚLTIPLES ARCHIVOS (.ZIP, .PDF, .PNG, ETC.) -->
+                <!-- 📎 VISUALIZADOR DE MÚLTIPLES ARCHIVOS HASTA 200MB -->
                 <div v-if="ticketActivoWorkspace.archivos && ticketActivoWorkspace.archivos.length > 0" class="pt-4 border-t border-zinc-800">
                   <label class="text-[10px] uppercase font-bold text-zinc-500 block mb-2">📎 Documentos / Archivos Adjuntos ({{ ticketActivoWorkspace.archivos.length }})</label>
                   <div class="grid grid-cols-1 gap-2">
@@ -426,7 +533,7 @@ const cerrarWorkspace = () => {
 
                       <template v-else>
                         <a :href="archivoItem" download="adjunto_ticket" class="bg-red-700 hover:bg-red-800 text-white text-xs font-bold px-4 py-2 rounded-xl flex items-center justify-center gap-2 transition w-full">
-                          📄 Descargar Archivo {{ Number(index) + 1 }}
+                          📄 Descargar Archivo {{ String(index) + 1 }}
                         </a>
                       </template>
 
@@ -468,7 +575,30 @@ const cerrarWorkspace = () => {
           </div>
         </div>
 
-        <!-- FORMULARIO GENERAR REQUERIMIENTO -->
+        <!-- 📊 RESTAURADO: MÓDULO EXPORTAR REPORTES -->
+        <div :class="esModoOscuro ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-slate-200'" class="w-full rounded-2xl border shadow-md overflow-hidden text-left">
+          <div :class="esModoOscuro ? 'border-zinc-800 bg-zinc-950/40' : 'border-slate-200 bg-slate-50/50'" class="p-3 sm:p-4 border-b flex items-center justify-between">
+            <h3 class="text-xs font-black tracking-wider uppercase">📊 Exportar Reporte Operacional</h3>
+          </div>
+          <div class="p-4 sm:p-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
+            <div class="flex flex-col space-y-1">
+              <label class="text-[10px] font-black text-zinc-400 uppercase tracking-wider">Fecha de Inicio:</label>
+              <input v-model="fechaInicioReporte" type="date" :class="esModoOscuro ? 'bg-zinc-950 border-zinc-800 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'" class="p-2.5 text-xs rounded-xl border focus:outline-none" />
+            </div>
+            <div class="flex flex-col space-y-1">
+              <label class="text-[10px] font-black text-zinc-400 uppercase tracking-wider">Fecha de Fin:</label>
+              <input v-model="fechaFinReporte" type="date" :class="esModoOscuro ? 'bg-zinc-950 border-zinc-800 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'" class="p-2.5 text-xs rounded-xl border focus:outline-none" />
+            </div>
+            <button @click="descargarReporteExcel" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs uppercase tracking-widest py-3 rounded-xl cursor-pointer shadow-md transition-all">
+              📥 Descargar Excel
+            </button>
+            <button @click="descargarReportePdf" class="w-full bg-red-700 hover:bg-red-800 text-white font-black text-xs uppercase tracking-widest py-3 rounded-xl cursor-pointer shadow-md transition-all">
+              📄 Descargar PDF
+            </button>
+          </div>
+        </div>
+
+        <!-- GENERAR REQUERIMIENTO CON SOPORTE HASTA 200MB -->
         <div :class="esModoOscuro ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-slate-200'" class="w-full rounded-2xl border shadow-md overflow-hidden text-left">
           <div class="bg-red-700 p-3 sm:p-4 text-white">
             <h3 class="text-xs font-black tracking-wider uppercase">Generar Requerimiento Dirigido</h3>
@@ -530,7 +660,6 @@ const cerrarWorkspace = () => {
               </div>
             </div>
             
-            <!-- 📎 INPUT MULTI-ARCHIVO DE CUALQUIER TIPO (.ZIP, .PDF, ETC.) -->
             <div class="flex flex-col border-b pb-3 border-zinc-800">
               <div class="flex items-center">
                 <label class="w-12 sm:w-16 text-xs font-bold text-zinc-400 uppercase">Adjuntos:</label>
@@ -553,11 +682,27 @@ const cerrarWorkspace = () => {
           </form>
         </div>
 
-        <!-- TABLA Y LISTADO -->
+        <!-- 📂 RESTAURADO: BARRA DE PESTAÑAS (FILTROS) Y BUSCADOR -->
+        <div :class="esModoOscuro ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-slate-200'" class="flex flex-col lg:flex-row lg:items-center justify-between gap-4 p-3 sm:p-4 rounded-2xl border transition-colors">
+          <div class="flex items-center space-x-1 overflow-x-auto pb-2 lg:pb-0 scrollbar-none">
+            <button v-for="opcion in [
+              { id: 'TODOS', texto: '📂 Todos' },
+              { id: 'PENDIENTES', texto: '⏳ Desarrollo' },
+              { id: 'COMPLETADO', texto: '🏁 Validación' },
+              { id: 'CONCLUIDOS', texto: '🔒 Historial' }
+            ]" :key="opcion.id" @click="filtroEstado = opcion.id" :class="filtroEstado === opcion.id ? 'bg-red-700 text-white font-semibold shadow-md' : 'text-zinc-400 hover:bg-zinc-800'" class="px-3 sm:px-4 py-2 rounded-xl text-xs cursor-pointer whitespace-nowrap">
+              {{ opcion.texto }}
+            </button>
+          </div>
+          <input v-model="busquedaQuery" type="text" placeholder="Buscar folio o texto..." :class="esModoOscuro ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-slate-100 border-slate-200'" class="px-4 py-2 text-xs rounded-xl focus:outline-none w-full lg:w-64" />
+        </div>
+
+        <!-- LISTADO DE TICKETS -->
         <div class="space-y-4 sm:space-y-6">
           <div v-if="loading" class="text-center py-12 text-zinc-400 animate-pulse text-sm">Sincronizando registros con Prisma...</div>
           <div v-else-if="error" class="text-center py-12 text-red-500 text-sm font-semibold">Error de comunicación.</div>
-          
+          <div v-else-if="ticketsFiltradosConPrivacidad.length === 0" class="text-center py-16 rounded-2xl text-sm border" :class="esModoOscuro ? 'bg-zinc-900 border-zinc-800 text-zinc-400' : 'bg-white border-slate-200 text-slate-500'">Bandeja vacía en esta sección.</div>
+
           <div v-else v-for="ticket in ticketsFiltradosConPrivacidad" :key="ticket.id" class="rounded-2xl border p-4 sm:p-6 space-y-4 transition bg-zinc-900 border-zinc-800">
             <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 border-b pb-3 border-zinc-800">
               <div class="flex flex-wrap items-center gap-2 text-[11px] sm:text-xs min-w-0">
@@ -587,9 +732,10 @@ const cerrarWorkspace = () => {
               </div>
 
               <div class="shrink-0 flex gap-2 w-full md:w-auto">
-                <button v-if="ticket.estado === 'RECIBIDO'" @click="activarProcesamientoTicket(ticket)" class="bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold px-4 py-2.5 rounded-xl cursor-pointer">🛠️ Procesar Requerimiento</button>
-                <button v-if="ticket.estado === 'TRABAJANDO'" @click="ticketIdActivo = ticket.id" class="bg-red-700 hover:bg-red-800 text-white text-xs font-bold px-4 py-2.5 rounded-xl cursor-pointer">💼 Abrir Panel / Chat</button>
-                <button v-if="ticket.estado === 'COMPLETADO'" @click="ticketIdActivo = ticket.id" class="bg-linear-to-r from-red-950 to-zinc-900 border border-red-900/40 text-red-400 text-xs font-black px-4 py-2.5 rounded-xl cursor-pointer">{{ esAdmin ? '🛡️ Auditar Folio' : '⏳ En Revisión' }}</button>
+                <button v-if="ticket.estado === 'RECIBIDO'" @click="activarProcesamientoTicket(ticket)" class="bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold px-4 py-2.5 rounded-xl cursor-pointer w-full md:w-auto">🛠️ Procesar Requerimiento</button>
+                <button v-if="ticket.estado === 'TRABAJANDO'" @click="ticketIdActivo = ticket.id" class="bg-red-700 hover:bg-red-800 text-white text-xs font-bold px-4 py-2.5 rounded-xl cursor-pointer w-full md:w-auto">💼 Abrir Panel / Chat</button>
+                <button v-if="ticket.estado === 'COMPLETADO'" @click="ticketIdActivo = ticket.id" class="bg-linear-to-r from-red-950 to-zinc-900 border border-red-900/40 text-red-400 text-xs font-black px-4 py-2.5 rounded-xl cursor-pointer w-full md:w-auto">{{ esAdmin ? '🛡️ Auditar Folio' : '⏳ En Revisión' }}</button>
+                <button v-if="ticket.estado === 'APROBADO'" @click="ticketIdActivo = ticket.id" class="text-xs font-bold tracking-wider uppercase px-4 py-2.5 rounded-xl border border-dashed border-zinc-800 text-zinc-400 hover:text-zinc-200 cursor-pointer w-full md:w-auto">🔒 Liberado (Ver Chat)</button>
               </div>
             </div>
           </div>
