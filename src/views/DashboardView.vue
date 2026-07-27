@@ -14,7 +14,7 @@ const obtenerFechaHoyLocal = () => {
 
 // --- ESTADOS DE CONTROL DE FLUJO Y FILTROS ---
 const filtroEstado = ref('TODOS')
-const filtroUsuario = ref('') // 👤 Filtro por usuario seleccionado
+const filtroUsuario = ref('') 
 const busquedaQuery = ref('')
 const esModoOscuro = ref(true)
 const comentarioAdmin = ref('')
@@ -124,7 +124,6 @@ const ocultarSugerenciasConRetraso = () => {
   setTimeout(() => { mostrarSugerencias.value = false }, 200)
 }
 
-// 📦 PROCESAR MÚLTIPLES ARCHIVOS HASTA 200MB CADA UNO
 const manejarSubidaArchivosMultiples = (event: Event) => {
   const target = event.target as HTMLInputElement
   const files = target.files
@@ -133,12 +132,10 @@ const manejarSubidaArchivosMultiples = (event: Event) => {
   listaArchivosBase64.value = []
 
   Array.from(files).forEach((file) => {
-    // ⚡ LÍMITE DE 200MB POR ARCHIVO
     if (file.size > 200 * 1024 * 1024) {
       alert(`⚠️ El archivo "${file.name}" supera el límite de 200MB.`)
       return
     }
-
     const reader = new FileReader()
     reader.onload = () => {
       listaArchivosBase64.value.push({
@@ -366,7 +363,7 @@ const manejarEnviarTicket = async () => {
   } catch (err: any) { alert('Error: ' + err.message) }
 }
 
-// 🔍 COMPUTADA RESTAURADA CON FILTRO POR USUARIO Y BÚSQUEDA AVANZADA
+// 🛡️ ACTUALIZADO: PRIVACIDAD INTELIGENTE
 const ticketsFiltradosConPrivacidad = computed(() => {
   const tickets = result.value?.misTickets || []
   const miIdPrisma = result.value?.me?.id || ''
@@ -374,12 +371,7 @@ const ticketsFiltradosConPrivacidad = computed(() => {
 
   let filtrados = [...tickets]
 
-  // 1. Permisos por Rol
-  if (!soyAdmin) {
-    filtrados = filtrados.filter((t: any) => t.asignadoId === miIdPrisma || t.creadorId === miIdPrisma)
-  }
-
-  // 2. Filtro de Estado (Pestañas)
+  // 1. Filtrado inicial por Pestaña seleccionada
   if (filtroEstado.value === 'PENDIENTES') {
     filtrados = filtrados.filter((t: any) => t.estado === 'RECIBIDO' || t.estado === 'TRABAJANDO')
   } else if (filtroEstado.value === 'COMPLETADO') {
@@ -388,14 +380,27 @@ const ticketsFiltradosConPrivacidad = computed(() => {
     filtrados = filtrados.filter((t: any) => t.estado === 'APROBADO' || t.estado === 'RECHAZADO')
   }
 
-  // 3. 👤 Filtro por Usuario Seleccionado (Desplegable)
+  // 2. Privacidad Inteligente
   if (filtroUsuario.value) {
+    // Si eliges un usuario específico del menú, ves sus tickets.
     filtrados = filtrados.filter((t: any) => 
       t.asignadoId === filtroUsuario.value || t.creadorId === filtroUsuario.value
     )
+  } else if (!busquedaQuery.value) {
+    // Si no estás buscando a nadie en específico...
+    if (!soyAdmin) {
+      // Empleados: SÓLO ven sus propios tickets.
+      filtrados = filtrados.filter((t: any) => t.asignadoId === miIdPrisma || t.creadorId === miIdPrisma)
+    } else {
+      // Admins: Mantenemos la bandeja principal ("Todos" y "Desarrollo") limpia, mostrando solo LOS TUYOS.
+      // Los tickets de otros te aparecerán automáticamente al entrar a "Validación" o "Historial".
+      if (filtroEstado.value === 'TODOS' || filtroEstado.value === 'PENDIENTES') {
+        filtrados = filtrados.filter((t: any) => t.asignadoId === miIdPrisma || t.creadorId === miIdPrisma)
+      }
+    }
   }
 
-  // 4. 🔍 Búsqueda General por Texto (Folio, Título, Descripción, Creador o Asignado)
+  // 3. Búsqueda de Texto General
   if (busquedaQuery.value) {
     const query = busquedaQuery.value.toLowerCase()
     filtrados = filtrados.filter((t: any) => 
@@ -533,7 +538,6 @@ const cerrarWorkspace = () => {
                   <p class="text-sm whitespace-pre-line mt-1 p-3 sm:p-4 rounded-xl border bg-zinc-900/40 border-zinc-800/40 text-zinc-300 leading-relaxed max-h-40 overflow-y-auto">{{ ticketActivoWorkspace.descripcion }}</p>
                 </div>
 
-                <!-- 📎 VISUALIZADOR DE MÚLTIPLES ARCHIVOS HASTA 200MB -->
                 <div v-if="ticketActivoWorkspace.archivos && ticketActivoWorkspace.archivos.length > 0" class="pt-4 border-t border-zinc-800">
                   <label class="text-[10px] uppercase font-bold text-zinc-500 block mb-2">📎 Documentos / Archivos Adjuntos ({{ ticketActivoWorkspace.archivos.length }})</label>
                   <div class="grid grid-cols-1 gap-2">
@@ -703,7 +707,7 @@ const cerrarWorkspace = () => {
           </form>
         </div>
 
-        <!-- 📂 BARRA DE PESTAÑAS (FILTROS DE ESTADO), DESPLEGABLE DE USUARIO Y BUSCADOR (RESTAURADOS) -->
+        <!-- 📂 BARRA DE PESTAÑAS Y BUSCADORES -->
         <div :class="esModoOscuro ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-slate-200'" class="flex flex-col lg:flex-row lg:items-center justify-between gap-4 p-3 sm:p-4 rounded-2xl border transition-colors">
           
           <!-- Pestañas de Estado -->
@@ -719,15 +723,12 @@ const cerrarWorkspace = () => {
           </div>
 
           <div class="flex flex-col sm:flex-row items-center gap-2 w-full lg:w-auto">
-            <!-- 👤 DESPLEGABLE DE FILTRO POR USUARIO (RESTAURADO) -->
             <select v-model="filtroUsuario" :class="esModoOscuro ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-slate-100 border-slate-200 text-slate-800'" class="px-3 py-2 text-xs rounded-xl focus:outline-none w-full sm:w-48 cursor-pointer font-semibold">
               <option value="">👤 Todos los usuarios</option>
               <option v-for="u in (result?.todosUsuarios || [])" :key="u.id" :value="u.id">
                 {{ u.nombre || u.email }}
               </option>
             </select>
-
-            <!-- 🔍 BUSCADOR DE FOLIO, TEXTO O USUARIOS -->
             <input v-model="busquedaQuery" type="text" placeholder="Buscar folio, texto o usuario..." :class="esModoOscuro ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-slate-100 border-slate-200'" class="px-4 py-2 text-xs rounded-xl focus:outline-none w-full sm:w-64" />
           </div>
 
