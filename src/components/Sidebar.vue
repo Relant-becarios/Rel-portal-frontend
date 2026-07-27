@@ -66,7 +66,7 @@ const cerrarSesion = async () => {
           :class="dark ? 'text-zinc-400 hover:text-white hover:bg-zinc-800/80' : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'"
         >
           <span class="text-base">🌐</span>
-          <span class="flex-1">Relant API</span>
+          <span class="flex-1">Gestor de proyectos</span>
           <span class="text-[9px] bg-red-950/80 border border-red-900/60 text-red-400 px-1.5 py-0.5 rounded font-mono">EXT ↗</span>
         </a>
       </nav>

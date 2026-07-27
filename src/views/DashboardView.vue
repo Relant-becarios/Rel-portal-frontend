@@ -12,11 +12,12 @@ const obtenerFechaHoyLocal = () => {
   return `${anio}-${mes}-${dia}`
 }
 
-// --- ESTADOS DE CONTROL DE FLUJO ---
+// --- ESTADOS DE CONTROL DE FLUJO Y FILTROS ---
 const filtroEstado = ref('TODOS')
+const filtroUsuario = ref('') // 👤 Filtro por usuario seleccionado
+const busquedaQuery = ref('')
 const esModoOscuro = ref(true)
 const comentarioAdmin = ref('')
-const busquedaQuery = ref('')
 const menuMovilAbierto = ref(false)
 
 // --- VARIABLES DE NUEVO TICKET ---
@@ -62,7 +63,7 @@ const cargarProyectosFirebase = async () => {
       listaProyectos.value = Array.from(new Set(nombres))
     }
   } catch (err) {
-    console.error('Error al consultar proyectos en Firebase:', err)
+    console.error('Error al consultar Firebase:', err)
   } finally {
     cargandoProyectos.value = false
   }
@@ -186,7 +187,7 @@ const formatearFechaVisual = (fechaStr: string) => {
   return fechaStr
 }
 
-// 🔒 GRAPHQL API CENTRAL
+// 🔒 GRAPHQL QUERIES & MUTATIONS
 const OBTENER_DATOS_DASHBOARD = gql`
   query GetDashboardData {
     me { id nombre email rol }
@@ -365,16 +366,20 @@ const manejarEnviarTicket = async () => {
   } catch (err: any) { alert('Error: ' + err.message) }
 }
 
+// 🔍 COMPUTADA RESTAURADA CON FILTRO POR USUARIO Y BÚSQUEDA AVANZADA
 const ticketsFiltradosConPrivacidad = computed(() => {
   const tickets = result.value?.misTickets || []
   const miIdPrisma = result.value?.me?.id || ''
   const soyAdmin = esAdmin.value
 
   let filtrados = [...tickets]
+
+  // 1. Permisos por Rol
   if (!soyAdmin) {
     filtrados = filtrados.filter((t: any) => t.asignadoId === miIdPrisma || t.creadorId === miIdPrisma)
   }
 
+  // 2. Filtro de Estado (Pestañas)
   if (filtroEstado.value === 'PENDIENTES') {
     filtrados = filtrados.filter((t: any) => t.estado === 'RECIBIDO' || t.estado === 'TRABAJANDO')
   } else if (filtroEstado.value === 'COMPLETADO') {
@@ -383,9 +388,25 @@ const ticketsFiltradosConPrivacidad = computed(() => {
     filtrados = filtrados.filter((t: any) => t.estado === 'APROBADO' || t.estado === 'RECHAZADO')
   }
 
+  // 3. 👤 Filtro por Usuario Seleccionado (Desplegable)
+  if (filtroUsuario.value) {
+    filtrados = filtrados.filter((t: any) => 
+      t.asignadoId === filtroUsuario.value || t.creadorId === filtroUsuario.value
+    )
+  }
+
+  // 4. 🔍 Búsqueda General por Texto (Folio, Título, Descripción, Creador o Asignado)
   if (busquedaQuery.value) {
     const query = busquedaQuery.value.toLowerCase()
-    filtrados = filtrados.filter((t: any) => t.titulo?.toLowerCase().includes(query) || t.descripcion?.toLowerCase().includes(query) || t.id?.toLowerCase().includes(query))
+    filtrados = filtrados.filter((t: any) => 
+      t.titulo?.toLowerCase().includes(query) || 
+      t.descripcion?.toLowerCase().includes(query) ||
+      t.id?.toLowerCase().includes(query) ||
+      t.creador?.nombre?.toLowerCase().includes(query) ||
+      t.creador?.email?.toLowerCase().includes(query) ||
+      t.asignado?.nombre?.toLowerCase().includes(query) ||
+      t.asignado?.email?.toLowerCase().includes(query)
+    )
   }
 
   return filtrados
@@ -533,7 +554,7 @@ const cerrarWorkspace = () => {
 
                       <template v-else>
                         <a :href="archivoItem" download="adjunto_ticket" class="bg-red-700 hover:bg-red-800 text-white text-xs font-bold px-4 py-2 rounded-xl flex items-center justify-center gap-2 transition w-full">
-                          📄 Descargar Archivo {{ String(index) + 1 }}
+                          📄 Descargar Archivo {{ Number(index) + 1 }}
                         </a>
                       </template>
 
@@ -575,7 +596,7 @@ const cerrarWorkspace = () => {
           </div>
         </div>
 
-        <!-- 📊 RESTAURADO: MÓDULO EXPORTAR REPORTES -->
+        <!-- 📊 MÓDULO EXPORTAR REPORTES -->
         <div :class="esModoOscuro ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-slate-200'" class="w-full rounded-2xl border shadow-md overflow-hidden text-left">
           <div :class="esModoOscuro ? 'border-zinc-800 bg-zinc-950/40' : 'border-slate-200 bg-slate-50/50'" class="p-3 sm:p-4 border-b flex items-center justify-between">
             <h3 class="text-xs font-black tracking-wider uppercase">📊 Exportar Reporte Operacional</h3>
@@ -598,7 +619,7 @@ const cerrarWorkspace = () => {
           </div>
         </div>
 
-        <!-- GENERAR REQUERIMIENTO CON SOPORTE HASTA 200MB -->
+        <!-- GENERAR REQUERIMIENTO -->
         <div :class="esModoOscuro ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-slate-200'" class="w-full rounded-2xl border shadow-md overflow-hidden text-left">
           <div class="bg-red-700 p-3 sm:p-4 text-white">
             <h3 class="text-xs font-black tracking-wider uppercase">Generar Requerimiento Dirigido</h3>
@@ -682,8 +703,10 @@ const cerrarWorkspace = () => {
           </form>
         </div>
 
-        <!-- 📂 RESTAURADO: BARRA DE PESTAÑAS (FILTROS) Y BUSCADOR -->
+        <!-- 📂 BARRA DE PESTAÑAS (FILTROS DE ESTADO), DESPLEGABLE DE USUARIO Y BUSCADOR (RESTAURADOS) -->
         <div :class="esModoOscuro ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-slate-200'" class="flex flex-col lg:flex-row lg:items-center justify-between gap-4 p-3 sm:p-4 rounded-2xl border transition-colors">
+          
+          <!-- Pestañas de Estado -->
           <div class="flex items-center space-x-1 overflow-x-auto pb-2 lg:pb-0 scrollbar-none">
             <button v-for="opcion in [
               { id: 'TODOS', texto: '📂 Todos' },
@@ -694,7 +717,20 @@ const cerrarWorkspace = () => {
               {{ opcion.texto }}
             </button>
           </div>
-          <input v-model="busquedaQuery" type="text" placeholder="Buscar folio o texto..." :class="esModoOscuro ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-slate-100 border-slate-200'" class="px-4 py-2 text-xs rounded-xl focus:outline-none w-full lg:w-64" />
+
+          <div class="flex flex-col sm:flex-row items-center gap-2 w-full lg:w-auto">
+            <!-- 👤 DESPLEGABLE DE FILTRO POR USUARIO (RESTAURADO) -->
+            <select v-model="filtroUsuario" :class="esModoOscuro ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-slate-100 border-slate-200 text-slate-800'" class="px-3 py-2 text-xs rounded-xl focus:outline-none w-full sm:w-48 cursor-pointer font-semibold">
+              <option value="">👤 Todos los usuarios</option>
+              <option v-for="u in (result?.todosUsuarios || [])" :key="u.id" :value="u.id">
+                {{ u.nombre || u.email }}
+              </option>
+            </select>
+
+            <!-- 🔍 BUSCADOR DE FOLIO, TEXTO O USUARIOS -->
+            <input v-model="busquedaQuery" type="text" placeholder="Buscar folio, texto o usuario..." :class="esModoOscuro ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-slate-100 border-slate-200'" class="px-4 py-2 text-xs rounded-xl focus:outline-none w-full sm:w-64" />
+          </div>
+
         </div>
 
         <!-- LISTADO DE TICKETS -->
@@ -745,3 +781,8 @@ const cerrarWorkspace = () => {
     </div>
   </div>
 </template>
+
+<style scoped>
+.scrollbar-none::-webkit-scrollbar { display: none; }
+.scrollbar-none { -ms-overflow-style: none; scrollbar-width: none; }
+</style>
