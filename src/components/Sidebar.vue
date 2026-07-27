@@ -69,6 +69,15 @@ const cerrarSesion = async () => {
           <span class="flex-1">Gestor de proyectos</span>
           <span class="text-[9px] bg-red-950/80 border border-red-900/60 text-red-400 px-1.5 py-0.5 rounded font-mono">EXT ↗</span>
         </a>
+
+        <router-link 
+  to="/graficas" 
+  class="flex items-center space-x-3 px-4 py-3 rounded-xl text-xs font-bold transition hover:bg-zinc-800"
+  active-class="bg-red-700 text-white"
+>
+  <span>📊</span>
+  <span>Métricas y Gráficas</span>
+</router-link>
       </nav>
     </div>
 
