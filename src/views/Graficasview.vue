@@ -8,7 +8,13 @@ import Chart from 'chart.js/auto'
 const esModoOscuro = ref(true)
 const menuMovilAbierto = ref(false)
 
-// Referencias HTML para los 6 gráficos
+const toggleTema = () => {
+  esModoOscuro.value = !esModoOscuro.value
+  localStorage.setItem('relant_theme', esModoOscuro.value ? 'oscuro' : 'claro')
+  renderizarGraficasDashboard()
+}
+
+// Referencias HTML para los gráficos
 const barChartRef = ref<HTMLCanvasElement | null>(null)
 const lineChartRef = ref<HTMLCanvasElement | null>(null)
 const gaugeChartRef = ref<HTMLCanvasElement | null>(null)
@@ -73,19 +79,24 @@ const renderizarGraficasDashboard = async () => {
   if (spark2Chart) spark2Chart.destroy()
   if (spark3Chart) spark3Chart.destroy()
 
-  const colorTexto = esModoOscuro.value ? '#9ca3af' : '#4b5563'
-  const colorRed = esModoOscuro.value ? '#18181b' : '#f8fafc'
+  const colorTexto = esModoOscuro.value ? '#a1a1aa' : '#475569'
+  const colorGrid = esModoOscuro.value ? '#27272a' : '#e2e8f0'
 
-  // 1. BAR CHART (Arriba Izquierda - Distribución por Prioridad)
+  // 1. BAR CHART: Prioridad de Tickets (Verde, Azul, Ámbar, Rojo Relant)
   if (barChartRef.value) {
     barChart = new Chart(barChartRef.value, {
       type: 'bar',
       data: {
-        labels: ['Baja', 'Media', 'Alta', 'Crítica'],
+        labels: ['🟢 Baja', '🔵 Media', '🟡 Alta', '🔴 Crítica'],
         datasets: [{
-          data: [conteoPrioridades.value.BAJA, conteoPrioridades.value.MEDIA, conteoPrioridades.value.ALTA, conteoPrioridades.value.CRITICA],
-          backgroundColor: '#10b981',
-          borderRadius: 4
+          data: [
+            conteoPrioridades.value.BAJA, 
+            conteoPrioridades.value.MEDIA, 
+            conteoPrioridades.value.ALTA, 
+            conteoPrioridades.value.CRITICA
+          ],
+          backgroundColor: ['#22c55e', '#3b82f6', '#f59e0b', '#ef4444'],
+          borderRadius: 6
         }]
       },
       options: {
@@ -93,14 +104,14 @@ const renderizarGraficasDashboard = async () => {
         maintainAspectRatio: false,
         plugins: { legend: { display: false } },
         scales: {
-          x: { ticks: { color: colorTexto }, grid: { display: false } },
-          y: { ticks: { color: colorTexto, stepSize: 1 }, grid: { color: esModoOscuro.value ? '#27272a' : '#e2e8f0' } }
+          x: { ticks: { color: colorTexto, font: { weight: 'bold' } }, grid: { display: false } },
+          y: { ticks: { color: colorTexto, stepSize: 1 }, grid: { color: colorGrid } }
         }
       }
     })
   }
 
-  // 2. DUAL LINE CHART (Arriba Derecha - Comparativa de Métricas)
+  // 2. DUAL LINE CHART: Comparativa de Recibidos vs Resueltos
   if (lineChartRef.value) {
     lineChart = new Chart(lineChartRef.value, {
       type: 'line',
@@ -108,10 +119,10 @@ const renderizarGraficasDashboard = async () => {
         labels: ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul'],
         datasets: [
           {
-            label: 'Recibidos',
+            label: 'Ingresados',
             data: [abiertos.value + 1, abiertos.value + 3, abiertos.value + 2, abiertos.value + 4, abiertos.value + 1, abiertos.value + 2, abiertos.value],
-            borderColor: '#10b981',
-            backgroundColor: '#10b981',
+            borderColor: '#ef4444', // Rojo Relant
+            backgroundColor: '#ef4444',
             tension: 0.3,
             borderWidth: 2,
             pointRadius: 4
@@ -119,8 +130,8 @@ const renderizarGraficasDashboard = async () => {
           {
             label: 'Resueltos',
             data: [concluidos.value, concluidos.value + 1, concluidos.value + 2, concluidos.value, concluidos.value + 3, concluidos.value + 1, concluidos.value],
-            borderColor: '#f43f5e',
-            backgroundColor: '#f43f5e',
+            borderColor: '#10b981', // Verde Éxito
+            backgroundColor: '#10b981',
             tension: 0.3,
             borderWidth: 2,
             pointRadius: 4
@@ -131,25 +142,25 @@ const renderizarGraficasDashboard = async () => {
         responsive: true,
         maintainAspectRatio: false,
         plugins: {
-          legend: { position: 'top', labels: { color: colorTexto, font: { size: 10, weight: 'bold' } } }
+          legend: { position: 'top', labels: { color: colorTexto, font: { size: 11, weight: 'bold' } } }
         },
         scales: {
           x: { ticks: { color: colorTexto }, grid: { display: false } },
-          y: { ticks: { color: colorTexto, stepSize: 1 }, grid: { color: esModoOscuro.value ? '#27272a' : '#e2e8f0' } }
+          y: { ticks: { color: colorTexto, stepSize: 1 }, grid: { color: colorGrid } }
         }
       }
     })
   }
 
-  // 3. GAUGE / VELOCÍMETRO (Abajo 1 - Efectividad)
+  // 3. GAUGE / VELOCÍMETRO: Efectividad Relant
   if (gaugeChartRef.value) {
     gaugeChart = new Chart(gaugeChartRef.value, {
       type: 'doughnut',
       data: {
         labels: ['Completados', 'Pendientes'],
         datasets: [{
-          data: [tasaEfectividad.value, 100 - tasaEfectividad.value],
-          backgroundColor: ['#10b981', '#f59e0b', '#f43f5e'],
+          data: [tasaEfectividad.value, Math.max(0, 100 - tasaEfectividad.value)],
+          backgroundColor: ['#10b981', esModoOscuro.value ? '#27272a' : '#cbd5e1'],
           borderWidth: 0
         }]
       },
@@ -164,7 +175,7 @@ const renderizarGraficasDashboard = async () => {
     })
   }
 
-  // 4. SPARKLINE LINEA (Abajo 2 - Histórico Abiertos)
+  // 4. SPARKLINE LÍNEA: Abiertos (Ámbar)
   if (spark1Ref.value) {
     spark1Chart = new Chart(spark1Ref.value, {
       type: 'line',
@@ -172,8 +183,8 @@ const renderizarGraficasDashboard = async () => {
         labels: [1, 2, 3, 4, 5, 6],
         datasets: [{
           data: [2, 4, 3, 6, 5, abiertos.value],
-          borderColor: '#10b981',
-          backgroundColor: 'rgba(16, 185, 129, 0.2)',
+          borderColor: '#f59e0b',
+          backgroundColor: 'rgba(245, 158, 11, 0.15)',
           fill: true,
           tension: 0.4,
           pointRadius: 0
@@ -188,7 +199,7 @@ const renderizarGraficasDashboard = async () => {
     })
   }
 
-  // 5. SPARKLINE BARRAS (Abajo 3 - Validación)
+  // 5. SPARKLINE BARRAS: Validación (Azul)
   if (spark2Ref.value) {
     spark2Chart = new Chart(spark2Ref.value, {
       type: 'bar',
@@ -196,7 +207,7 @@ const renderizarGraficasDashboard = async () => {
         labels: [1, 2, 3, 4, 5, 6, 7],
         datasets: [{
           data: [1, 3, 2, 4, 3, 5, enValidacion.value],
-          backgroundColor: '#10b981',
+          backgroundColor: '#3b82f6',
           borderRadius: 2
         }]
       },
@@ -209,7 +220,7 @@ const renderizarGraficasDashboard = async () => {
     })
   }
 
-  // 6. SPARKLINE AREA (Abajo 4 - Total)
+  // 6. SPARKLINE ÁREA: Total Requerimientos (Rojo Relant)
   if (spark3Ref.value) {
     spark3Chart = new Chart(spark3Ref.value, {
       type: 'line',
@@ -217,8 +228,8 @@ const renderizarGraficasDashboard = async () => {
         labels: [1, 2, 3, 4, 5, 6],
         datasets: [{
           data: [3, 5, 4, 8, 7, totalTickets.value],
-          borderColor: '#10b981',
-          backgroundColor: 'rgba(16, 185, 129, 0.3)',
+          borderColor: '#ef4444',
+          backgroundColor: 'rgba(239, 68, 68, 0.15)',
           fill: true,
           tension: 0.3,
           pointRadius: 0
@@ -244,7 +255,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <div :class="esModoOscuro ? 'bg-zinc-950 text-zinc-100' : 'bg-slate-100 text-slate-800'" class="flex min-h-screen font-sans transition-colors duration-200">
+  <div :class="esModoOscuro ? 'bg-zinc-950 text-zinc-100' : 'bg-slate-50 text-slate-800'" class="flex min-h-screen font-sans transition-colors duration-200">
     
     <!-- Sidebar -->
     <div :class="[menuMovilAbierto ? 'translate-x-0' : '-translate-x-full', 'lg:translate-x-0 fixed lg:sticky top-0 left-0 h-screen z-50 transition-transform duration-300 shrink-0']">
@@ -253,70 +264,55 @@ onMounted(() => {
 
     <div v-if="menuMovilAbierto" @click="menuMovilAbierto = false" class="lg:hidden fixed inset-0 bg-black/60 z-40"></div>
 
-    <div class="flex-1 flex flex-col min-w-0">
+    <div class="flex-1 flex flex-col min-w-0 w-full">
       
-      <!-- 🟢 TOP BAR DASHBOARD HEADER (Estilo Mockup) -->
-      <div :class="esModoOscuro ? 'bg-zinc-900 border-zinc-800' : 'bg-slate-800 text-white'" class="h-14 border-b flex items-center justify-between shadow-md shrink-0">
-        <div class="flex items-center space-x-0 h-full">
-          <!-- Logo Block en Verde Menta / Esmeralda -->
-          <div class="bg-emerald-500 h-full px-5 flex items-center justify-center font-black text-slate-900 tracking-wider text-sm">
-            ▲ RELANT
-          </div>
-          <h2 class="px-6 text-sm sm:text-base font-black tracking-wider uppercase text-white">
-            REPORTES Y MÉTRICAS DE TICKETS
-          </h2>
-        </div>
-        <div class="px-6 flex items-center space-x-3">
-          <button @click="menuMovilAbierto = !menuMovilAbierto" class="lg:hidden text-white p-1">
-            ☰
+      <!-- 🔴 ENCABEZADO ESTÁNDAR RELANT HQ -->
+      <header :class="esModoOscuro ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-slate-200'" class="h-16 border-b px-4 sm:px-8 flex justify-between items-center shrink-0">
+        <div class="flex items-center space-x-2 sm:space-x-3 min-w-0">
+          <button @click="menuMovilAbierto = !menuMovilAbierto" class="lg:hidden p-1.5 rounded-xl border border-zinc-800 text-zinc-400 hover:text-white cursor-pointer mr-1">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
           </button>
-          <div class="flex space-x-1.5">
-            <span class="w-3 h-3 rounded-full bg-emerald-500 inline-block"></span>
-            <span class="w-3 h-3 rounded-full bg-zinc-600 inline-block"></span>
-            <span class="w-3 h-3 rounded-full bg-zinc-600 inline-block"></span>
-          </div>
+          <span class="text-[10px] sm:text-xs font-black bg-red-700 text-white px-2 py-0.5 rounded-md tracking-wider whitespace-nowrap">RELANT HQ</span>
+          <h2 class="text-sm sm:text-lg font-black tracking-tight truncate">Métricas y Analítica</h2>
         </div>
-      </div>
+        <div class="flex items-center space-x-2 sm:space-x-4">
+          <button @click="toggleTema" :class="esModoOscuro ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-slate-100 border-slate-300 text-slate-800'" class="px-2.5 sm:px-4 py-1 sm:py-2 rounded-xl border text-[10px] sm:text-xs font-semibold cursor-pointer">
+            {{ esModoOscuro ? '☀️ Claro' : '🌙 Oscuro' }}
+          </button>
+        </div>
+      </header>
 
-      <main class="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5 max-w-7xl mx-auto w-full">
+      <main class="flex-1 overflow-y-auto p-4 sm:p-8 space-y-6 max-w-7xl mx-auto w-full">
         
-        <!-- ⬛ BANNER SUBTÍTULO (WIDGETS PANEL) -->
-        <div :class="esModoOscuro ? 'bg-zinc-900 border-zinc-800' : 'bg-slate-800 text-white'" class="rounded-xl border flex items-center overflow-hidden shadow-sm">
-          <div class="w-2.5 h-10 bg-emerald-500"></div>
-          <h3 class="px-4 text-xs font-black tracking-widest uppercase text-white">
-            PANEL GENERAL DE INDICADORES (WIDGETS)
-          </h3>
+        <div v-if="loading" class="text-center py-20 text-zinc-500 animate-pulse font-mono text-sm">
+          📊 Calculando indicadores operacionales...
         </div>
 
-        <div v-if="loading" class="text-center py-20 text-zinc-500 animate-pulse font-mono">
-          📊 Cargando analíticas de tickets...
+        <div v-else-if="error" class="text-center py-20 text-red-500 font-bold text-sm">
+          ❌ Error al cargar los datos del servidor.
         </div>
 
-        <div v-else-if="error" class="text-center py-20 text-red-500 font-bold">
-          ❌ Error al conectar con el servidor de métricas.
-        </div>
-
-        <div v-else class="space-y-5">
+        <div v-else class="space-y-6">
           
-          <!-- 📈 FILA SUPERIOR: 2 GRÁFICOS GRANDES -->
-          <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
+          <!-- 📈 FILA SUPERIOR: 2 GRÁFICOS PRINCIPALES -->
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
             
-            <!-- Widget 1: Bar Chart -->
-            <div :class="esModoOscuro ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-slate-200'" class="p-5 rounded-2xl border shadow-sm flex flex-col">
-              <h4 class="text-xs font-black uppercase tracking-wider text-zinc-400 mb-3">
-                TENDENCIA POR PRIORIDAD DE TICKETS
-              </h4>
-              <div class="relative h-60 w-full">
+            <!-- Gráfica 1: Prioridad de Requerimientos -->
+            <div :class="esModoOscuro ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-slate-200'" class="p-5 sm:p-6 rounded-2xl border shadow-md flex flex-col">
+              <h3 class="text-xs font-black uppercase tracking-wider text-zinc-400 mb-4">
+                Distribución por Prioridad de Requerimientos
+              </h3>
+              <div class="relative h-64 w-full">
                 <canvas ref="barChartRef"></canvas>
               </div>
             </div>
 
-            <!-- Widget 2: Line Chart (Dual Metrics) -->
-            <div :class="esModoOscuro ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-slate-200'" class="p-5 rounded-2xl border shadow-sm flex flex-col">
-              <h4 class="text-xs font-black uppercase tracking-wider text-zinc-400 mb-3">
-                HISTÓRICO DE REQUERIMIENTOS (2 MÉTRICAS)
-              </h4>
-              <div class="relative h-60 w-full">
+            <!-- Gráfica 2: Histórico de Requerimientos -->
+            <div :class="esModoOscuro ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-slate-200'" class="p-5 sm:p-6 rounded-2xl border shadow-md flex flex-col">
+              <h3 class="text-xs font-black uppercase tracking-wider text-zinc-400 mb-4">
+                Histórico de Ingresados vs Resueltos
+              </h3>
+              <div class="relative h-64 w-full">
                 <canvas ref="lineChartRef"></canvas>
               </div>
             </div>
@@ -326,11 +322,11 @@ onMounted(() => {
           <!-- 📊 FILA INFERIOR: 4 TARJETAS KPI WIDGETS -->
           <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
             
-            <!-- KPI 1: Gauge (Velocímetro de Efectividad) -->
-            <div :class="esModoOscuro ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-slate-200'" class="p-4 rounded-2xl border shadow-sm flex flex-col justify-between">
-              <h5 class="text-[10px] font-black uppercase tracking-wider text-zinc-400">
-                EFECTIVIDAD DE RESOLUCIÓN (%)
-              </h5>
+            <!-- KPI 1: Velocímetro de Efectividad -->
+            <div :class="esModoOscuro ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-slate-200'" class="p-5 rounded-2xl border shadow-md flex flex-col justify-between">
+              <h4 class="text-[10px] font-black uppercase tracking-wider text-zinc-400">
+                Tasa de Efectividad (%)
+              </h4>
               <div class="relative h-28 w-full flex items-center justify-center mt-2">
                 <canvas ref="gaugeChartRef"></canvas>
                 <span class="absolute bottom-1 text-lg font-black text-emerald-400 font-mono">
@@ -339,12 +335,12 @@ onMounted(() => {
               </div>
             </div>
 
-            <!-- KPI 2: Abiertos + Sparkline Línea -->
-            <div :class="esModoOscuro ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-slate-200'" class="p-4 rounded-2xl border shadow-sm flex flex-col justify-between">
-              <h5 class="text-[10px] font-black uppercase tracking-wider text-zinc-400">
-                TICKETS ABIERTOS / DESARROLLO
-              </h5>
-              <div class="text-2xl sm:text-3xl font-black mt-2 font-mono text-amber-400">
+            <!-- KPI 2: Abiertos + Sparkline Ámbar -->
+            <div :class="esModoOscuro ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-slate-200'" class="p-5 rounded-2xl border shadow-md flex flex-col justify-between">
+              <h4 class="text-[10px] font-black uppercase tracking-wider text-amber-400">
+                ⏳ En Desarrollo / Abiertos
+              </h4>
+              <div class="text-3xl font-black mt-2 font-mono text-amber-500">
                 {{ abiertos }}
               </div>
               <div class="h-12 w-full mt-2">
@@ -352,12 +348,12 @@ onMounted(() => {
               </div>
             </div>
 
-            <!-- KPI 3: Validación + Sparkline Barras -->
-            <div :class="esModoOscuro ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-slate-200'" class="p-4 rounded-2xl border shadow-sm flex flex-col justify-between">
-              <h5 class="text-[10px] font-black uppercase tracking-wider text-zinc-400">
-                EN VALIDACIÓN
-              </h5>
-              <div class="text-2xl sm:text-3xl font-black mt-2 font-mono text-blue-400">
+            <!-- KPI 3: Validación + Sparkline Azul -->
+            <div :class="esModoOscuro ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-slate-200'" class="p-5 rounded-2xl border shadow-md flex flex-col justify-between">
+              <h4 class="text-[10px] font-black uppercase tracking-wider text-blue-400">
+                🏁 En Validación
+              </h4>
+              <div class="text-3xl font-black mt-2 font-mono text-blue-500">
                 {{ enValidacion }}
               </div>
               <div class="h-12 w-full mt-2">
@@ -365,12 +361,12 @@ onMounted(() => {
               </div>
             </div>
 
-            <!-- KPI 4: Total Requerimientos + Sparkline Area -->
-            <div :class="esModoOscuro ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-slate-200'" class="p-4 rounded-2xl border shadow-sm flex flex-col justify-between">
-              <h5 class="text-[10px] font-black uppercase tracking-wider text-zinc-400">
-                TOTAL REQUERIMIENTOS
-              </h5>
-              <div class="text-2xl sm:text-3xl font-black mt-2 font-mono text-emerald-400">
+            <!-- KPI 4: Total Requerimientos + Sparkline Rojo Relant -->
+            <div :class="esModoOscuro ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-slate-200'" class="p-5 rounded-2xl border shadow-md flex flex-col justify-between">
+              <h4 class="text-[10px] font-black uppercase tracking-wider text-red-400">
+                📋 Total Requerimientos
+              </h4>
+              <div class="text-3xl font-black mt-2 font-mono text-red-500">
                 {{ totalTickets }}
               </div>
               <div class="h-12 w-full mt-2">
