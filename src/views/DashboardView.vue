@@ -14,7 +14,6 @@ const obtenerFechaHoyLocal = () => {
 
 // --- ESTADOS DE CONTROL DE FLUJO Y FILTROS ---
 const filtroEstado = ref('TODOS')
-const filtroUsuario = ref('') 
 const busquedaQuery = ref('')
 const esModoOscuro = ref(true)
 const comentarioAdmin = ref('')
@@ -240,12 +239,9 @@ const ejecutarCambioPrioridad = async (ticketId: string, nuevaPrioridad: string)
 const obtenerTicketsFiltradosReporte = () => {
   const tickets = result.value?.misTickets || []
   const miIdPrisma = result.value?.me?.id || ''
-  const soyAdmin = esAdmin.value
 
-  let baseTickets = [...tickets]
-  if (!soyAdmin) {
-    baseTickets = baseTickets.filter((t: any) => t.asignadoId === miIdPrisma || t.creadorId === miIdPrisma)
-  }
+  // Reporte estrictamente para los tickets del usuario
+  let baseTickets = tickets.filter((t: any) => t.asignadoId === miIdPrisma || t.creadorId === miIdPrisma)
 
   const inicioDate = new Date(fechaInicioReporte.value + 'T00:00:00')
   const finDate = new Date(fechaFinReporte.value + 'T23:59:59')
@@ -363,15 +359,15 @@ const manejarEnviarTicket = async () => {
   } catch (err: any) { alert('Error: ' + err.message) }
 }
 
-// 🛡️ ACTUALIZADO: PRIVACIDAD INTELIGENTE
+// 🛡️ REGLA ESTRICTA DE PERTENENCIA: CREADOR O ASIGNADO ÚNICAMENTE
 const ticketsFiltradosConPrivacidad = computed(() => {
   const tickets = result.value?.misTickets || []
   const miIdPrisma = result.value?.me?.id || ''
-  const soyAdmin = esAdmin.value
 
-  let filtrados = [...tickets]
+  // 1. Filtrar ESTRICTAMENTE para mostrar solo los que el usuario envió o le fueron asignados a él
+  let filtrados = tickets.filter((t: any) => t.asignadoId === miIdPrisma || t.creadorId === miIdPrisma)
 
-  // 1. Filtrado inicial por Pestaña seleccionada
+  // 2. Filtrado por Pestañas de Estado
   if (filtroEstado.value === 'PENDIENTES') {
     filtrados = filtrados.filter((t: any) => t.estado === 'RECIBIDO' || t.estado === 'TRABAJANDO')
   } else if (filtroEstado.value === 'COMPLETADO') {
@@ -380,37 +376,13 @@ const ticketsFiltradosConPrivacidad = computed(() => {
     filtrados = filtrados.filter((t: any) => t.estado === 'APROBADO' || t.estado === 'RECHAZADO')
   }
 
-  // 2. Privacidad Inteligente
-  if (filtroUsuario.value) {
-    // Si eliges un usuario específico del menú, ves sus tickets.
-    filtrados = filtrados.filter((t: any) => 
-      t.asignadoId === filtroUsuario.value || t.creadorId === filtroUsuario.value
-    )
-  } else if (!busquedaQuery.value) {
-    // Si no estás buscando a nadie en específico...
-    if (!soyAdmin) {
-      // Empleados: SÓLO ven sus propios tickets.
-      filtrados = filtrados.filter((t: any) => t.asignadoId === miIdPrisma || t.creadorId === miIdPrisma)
-    } else {
-      // Admins: Mantenemos la bandeja principal ("Todos" y "Desarrollo") limpia, mostrando solo LOS TUYOS.
-      // Los tickets de otros te aparecerán automáticamente al entrar a "Validación" o "Historial".
-      if (filtroEstado.value === 'TODOS' || filtroEstado.value === 'PENDIENTES') {
-        filtrados = filtrados.filter((t: any) => t.asignadoId === miIdPrisma || t.creadorId === miIdPrisma)
-      }
-    }
-  }
-
-  // 3. Búsqueda de Texto General
+  // 3. Búsqueda de Texto General (Folio, Título, Descripción)
   if (busquedaQuery.value) {
     const query = busquedaQuery.value.toLowerCase()
     filtrados = filtrados.filter((t: any) => 
       t.titulo?.toLowerCase().includes(query) || 
       t.descripcion?.toLowerCase().includes(query) ||
-      t.id?.toLowerCase().includes(query) ||
-      t.creador?.nombre?.toLowerCase().includes(query) ||
-      t.creador?.email?.toLowerCase().includes(query) ||
-      t.asignado?.nombre?.toLowerCase().includes(query) ||
-      t.asignado?.email?.toLowerCase().includes(query)
+      t.id?.toLowerCase().includes(query)
     )
   }
 
@@ -707,7 +679,7 @@ const cerrarWorkspace = () => {
           </form>
         </div>
 
-        <!-- 📂 BARRA DE PESTAÑAS Y BUSCADORES -->
+        <!-- 📂 BARRA DE PESTAÑAS Y BUSCADOR (SIN DESPLEGABLE DE USUARIOS) -->
         <div :class="esModoOscuro ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-slate-200'" class="flex flex-col lg:flex-row lg:items-center justify-between gap-4 p-3 sm:p-4 rounded-2xl border transition-colors">
           
           <!-- Pestañas de Estado -->
@@ -722,15 +694,8 @@ const cerrarWorkspace = () => {
             </button>
           </div>
 
-          <div class="flex flex-col sm:flex-row items-center gap-2 w-full lg:w-auto">
-            <select v-model="filtroUsuario" :class="esModoOscuro ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-slate-100 border-slate-200 text-slate-800'" class="px-3 py-2 text-xs rounded-xl focus:outline-none w-full sm:w-48 cursor-pointer font-semibold">
-              <option value="">👤 Todos los usuarios</option>
-              <option v-for="u in (result?.todosUsuarios || [])" :key="u.id" :value="u.id">
-                {{ u.nombre || u.email }}
-              </option>
-            </select>
-            <input v-model="busquedaQuery" type="text" placeholder="Buscar folio, texto o usuario..." :class="esModoOscuro ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-slate-100 border-slate-200'" class="px-4 py-2 text-xs rounded-xl focus:outline-none w-full sm:w-64" />
-          </div>
+          <!-- 🔍 BUSCADOR POR FOLIO O TEXTO -->
+          <input v-model="busquedaQuery" type="text" placeholder="Buscar folio o texto..." :class="esModoOscuro ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-slate-100 border-slate-200'" class="px-4 py-2 text-xs rounded-xl focus:outline-none w-full lg:w-64" />
 
         </div>
 
@@ -738,7 +703,7 @@ const cerrarWorkspace = () => {
         <div class="space-y-4 sm:space-y-6">
           <div v-if="loading" class="text-center py-12 text-zinc-400 animate-pulse text-sm">Sincronizando registros con Prisma...</div>
           <div v-else-if="error" class="text-center py-12 text-red-500 text-sm font-semibold">Error de comunicación.</div>
-          <div v-else-if="ticketsFiltradosConPrivacidad.length === 0" class="text-center py-16 rounded-2xl text-sm border" :class="esModoOscuro ? 'bg-zinc-900 border-zinc-800 text-zinc-400' : 'bg-white border-slate-200 text-slate-500'">Bandeja vacía en esta sección.</div>
+          <div v-else-if="ticketsFiltradosConPrivacidad.length === 0" class="text-center py-16 rounded-2xl text-sm border" :class="esModoOscuro ? 'bg-zinc-900 border-zinc-800 text-zinc-400' : 'bg-white border-slate-200 text-slate-500'">No tienes requerimientos registrados en esta sección.</div>
 
           <div v-else v-for="ticket in ticketsFiltradosConPrivacidad" :key="ticket.id" class="rounded-2xl border p-4 sm:p-6 space-y-4 transition bg-zinc-900 border-zinc-800">
             <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 border-b pb-3 border-zinc-800">
