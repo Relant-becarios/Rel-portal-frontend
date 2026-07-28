@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { auth } from '../firebase'
 import { signOut } from 'firebase/auth'
@@ -102,17 +102,6 @@ const cerrarSesion = async () => {
         >
           <span class="text-base shrink-0">📊</span>
           <span v-if="!colapsado" class="truncate">Métricas y Gráficas</span>
-        </router-link>
-
-        <router-link 
-          to="/perfil" 
-          class="flex items-center space-x-3 px-4 py-3 rounded-xl transition text-xs font-bold"
-          :class="dark ? 'text-zinc-400 hover:text-white hover:bg-zinc-800/80' : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'"
-          active-class="bg-red-700 !text-white font-black shadow-lg"
-          :title="colapsado ? 'Mi Perfil' : ''"
-        >
-          <span class="text-base shrink-0">👤</span>
-          <span v-if="!colapsado" class="truncate">Mi Perfil</span>
         </router-link>
       </nav>
     </div>
