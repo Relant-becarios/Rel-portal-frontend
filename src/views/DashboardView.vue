@@ -253,9 +253,17 @@ const manejarEnviarTicket = async () => {
 const ticketsFiltradosConPrivacidad = computed(() => {
   const tickets = result.value?.misTickets || []
   const miIdPrisma = result.value?.me?.id || ''
+  const miEmail = result.value?.me?.email?.toLowerCase() || ''
 
-  let filtrados = tickets.filter((t: any) => t.asignadoId === miIdPrisma || t.creadorId === miIdPrisma)
+  // 🛡️ Filtro doble: Valida ID y Correo Electrónico
+  let filtrados = tickets.filter((t: any) => 
+    t.asignadoId === miIdPrisma || 
+    t.creadorId === miIdPrisma ||
+    t.creador?.email?.toLowerCase() === miEmail ||
+    t.asignado?.email?.toLowerCase() === miEmail
+  )
 
+  // Filtro por Pestaña de Estado
   if (filtroEstado.value === 'PENDIENTES') {
     filtrados = filtrados.filter((t: any) => t.estado === 'RECIBIDO' || t.estado === 'TRABAJANDO')
   } else if (filtroEstado.value === 'COMPLETADO') {
@@ -264,6 +272,7 @@ const ticketsFiltradosConPrivacidad = computed(() => {
     filtrados = filtrados.filter((t: any) => t.estado === 'APROBADO' || t.estado === 'RECHAZADO')
   }
 
+  // Buscador de Texto
   if (busquedaQuery.value) {
     const query = busquedaQuery.value.toLowerCase()
     filtrados = filtrados.filter((t: any) => 
@@ -275,7 +284,6 @@ const ticketsFiltradosConPrivacidad = computed(() => {
 
   return filtrados
 })
-
 const activarProcesamientoTicket = async (ticket: any) => {
   try {
     await apiIniciar({ ticketId: ticket.id })
