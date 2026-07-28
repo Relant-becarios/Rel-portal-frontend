@@ -1,19 +1,25 @@
 <script setup lang="ts">
-import { useRouter } from 'vue-router'
+import { ref } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import { auth } from '../firebase'
 import { signOut } from 'firebase/auth'
-import { apolloClient } from '../main' // 👈 nuevo import
+import { apolloClient } from '../main'
 
-defineProps<{
-  dark?: boolean
-}>()
+defineProps<{ dark?: boolean }>()
 
 const router = useRouter()
-const usuarioActual = auth.currentUser
+const route = useRoute()
+
+// 🍔 Estado colapsado / desplegado del menú
+const colapsado = ref(false)
+
+const toggleColapsar = () => {
+  colapsado.value = !colapsado.value
+}
 
 const cerrarSesion = async () => {
   try {
-    await apolloClient.clearStore() // 👈 limpia caché ANTES de cerrar sesión
+    await apolloClient.clearStore()
     await signOut(auth)
     router.push('/login')
   } catch (error) {
@@ -24,90 +30,89 @@ const cerrarSesion = async () => {
 
 <template>
   <aside 
-    :class="dark ? 'bg-zinc-900 border-zinc-800 text-zinc-100' : 'bg-white border-slate-200 text-slate-800'"
-    class="w-64 h-screen border-r flex flex-col justify-between p-4 shrink-0 select-none font-sans"
+    :class="[
+      colapsado ? 'w-20' : 'w-64',
+      'bg-zinc-900 border-zinc-800 text-zinc-100 h-screen border-r flex flex-col justify-between p-4 shrink-0 select-none font-sans transition-all duration-300 relative'
+    ]"
   >
     <div class="space-y-6">
       
-      <div class="flex items-center space-x-3 px-2 pt-2">
-        <div class="w-8 h-8 bg-red-700 rounded-xl flex items-center justify-center font-black text-white text-lg shadow-md">
-          R
+      <!-- Encabezado con Botón Hamburguesa -->
+      <div class="flex items-center justify-between px-2 pt-2">
+        <div v-if="!colapsado" class="flex items-center space-x-3 truncate">
+          <div class="w-8 h-8 bg-red-700 rounded-xl flex items-center justify-center font-black text-white text-lg shadow-md shrink-0">
+            R
+          </div>
+          <span class="font-black tracking-tight text-base truncate">Relant Portal</span>
         </div>
-        <span class="font-black tracking-tight text-base">Relant Portal</span>
+
+        <!-- 🍔 BOTÓN HAMBURGUESA -->
+        <button 
+          @click="toggleColapsar" 
+          class="p-2 rounded-xl transition cursor-pointer hover:bg-zinc-800 text-zinc-400 hover:text-white shrink-0 mx-auto"
+          title="Colapsar / Desplegar menú"
+        >
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
+          </svg>
+        </button>
       </div>
 
-      <router-link 
-  to="/perfil" 
-  class="flex items-center space-x-3 px-4 py-3 rounded-xl text-xs font-bold transition hover:bg-zinc-800"
-  active-class="bg-red-700 text-white"
->
-  <span>👤</span>
-  <span>Mi Perfil</span>
-</router-link>
-
+      <!-- Menú de Navegación -->
       <nav class="space-y-1.5">
         <router-link 
           to="/home" 
-          class="flex items-center space-x-3 px-4 py-3 rounded-xl transition text-xs font-bold"
-          :class="dark ? 'text-zinc-400 hover:text-white hover:bg-zinc-800/80' : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'"
+          class="flex items-center space-x-3 px-4 py-3 rounded-xl transition text-xs font-bold text-zinc-400 hover:text-white hover:bg-zinc-800/80"
           active-class="bg-red-700 !text-white font-black shadow-lg"
+          :title="colapsado ? 'Inicio' : ''"
         >
-          <span class="text-base">🏠</span>
-          <span>Inicio</span>
+          <span class="text-base shrink-0">🏠</span>
+          <span v-if="!colapsado" class="truncate">Inicio</span>
         </router-link>
 
         <router-link 
           to="/tickets" 
-          class="flex items-center space-x-3 px-4 py-3 rounded-xl transition text-xs font-bold"
-          :class="dark ? 'text-zinc-400 hover:text-white hover:bg-zinc-800/80' : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'"
+          class="flex items-center space-x-3 px-4 py-3 rounded-xl transition text-xs font-bold text-zinc-400 hover:text-white hover:bg-zinc-800/80"
           active-class="bg-red-700 !text-white font-black shadow-lg"
+          :title="colapsado ? 'Tickets' : ''"
         >
-          <span class="text-base">🎫</span>
-          <span>Tickets</span>
+          <span class="text-base shrink-0">🎫</span>
+          <span v-if="!colapsado" class="truncate">Tickets</span>
         </router-link>
 
         <a 
           href="https://relantapi.netlify.app/" 
           target="_blank" 
           rel="noopener noreferrer"
-          class="flex items-center space-x-3 px-4 py-3 rounded-xl transition text-xs font-bold"
-          :class="dark ? 'text-zinc-400 hover:text-white hover:bg-zinc-800/80' : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'"
+          class="flex items-center space-x-3 px-4 py-3 rounded-xl transition text-xs font-bold text-zinc-400 hover:text-white hover:bg-zinc-800/80"
+          :title="colapsado ? 'Gestor de proyectos' : ''"
         >
-          <span class="text-base">🌐</span>
-          <span class="flex-1">Gestor de proyectos</span>
-          <span class="text-[9px] bg-red-950/80 border border-red-900/60 text-red-400 px-1.5 py-0.5 rounded font-mono">EXT ↗</span>
+          <span class="text-base shrink-0">🌐</span>
+          <span v-if="!colapsado" class="flex-1 truncate">Gestor de proyectos</span>
+          <span v-if="!colapsado" class="text-[9px] bg-red-950/80 border border-red-900/60 text-red-400 px-1.5 py-0.5 rounded font-mono shrink-0">EXT ↗</span>
         </a>
 
         <router-link 
-  to="/graficas" 
-  class="flex items-center space-x-3 px-4 py-3 rounded-xl text-xs font-bold transition hover:bg-zinc-800"
-  active-class="bg-red-700 text-white"
->
-  <span>📊</span>
-  <span>Métricas y Gráficas</span>
-</router-link>
+          to="/graficas" 
+          class="flex items-center space-x-3 px-4 py-3 rounded-xl transition text-xs font-bold text-zinc-400 hover:text-white hover:bg-zinc-800/80"
+          active-class="bg-red-700 !text-white font-black shadow-lg"
+          :title="colapsado ? 'Métricas y Gráficas' : ''"
+        >
+          <span class="text-base shrink-0">📊</span>
+          <span v-if="!colapsado" class="truncate">Métricas y Gráficas</span>
+        </router-link>
       </nav>
     </div>
 
-    <div class="space-y-3 border-t pt-4" :class="dark ? 'border-zinc-800' : 'border-slate-100'">
-      <div class="flex items-center space-x-3 p-2 rounded-xl" :class="dark ? 'bg-zinc-950/60 border border-zinc-800/80' : 'bg-slate-50 border border-slate-200'">
-        <div class="w-8 h-8 rounded-lg bg-red-950/80 border border-red-900/60 text-red-400 flex items-center justify-center text-xs font-black shrink-0">
-          {{ usuarioActual?.email ? usuarioActual.email.substring(0, 2).toUpperCase() : 'OP' }}
-        </div>
-        <div class="min-w-0 flex-1">
-          <p class="text-[11px] font-bold truncate" :class="dark ? 'text-zinc-200' : 'text-slate-800'" :title="usuarioActual?.email || ''">
-            {{ usuarioActual?.email || 'operador@relant.com' }}
-          </p>
-          <span class="text-[9px] font-black uppercase text-red-500 tracking-wider block">OPERADOR ACTIVO</span>
-        </div>
-      </div>
-
+    <!-- Desconectar -->
+    <div class="space-y-3 border-t border-zinc-800 pt-4">
       <button 
         @click="cerrarSesion"
-        class="w-full py-2.5 px-4 rounded-xl text-xs font-bold transition cursor-pointer text-center"
-        :class="dark ? 'bg-zinc-800 hover:bg-zinc-700 text-zinc-300' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'"
+        class="w-full py-2.5 px-4 rounded-xl text-xs font-bold transition cursor-pointer text-center bg-zinc-800/50 hover:bg-red-950/40 text-zinc-400 hover:text-red-400"
+        :title="colapsado ? 'Desconectar Sistema' : ''"
       >
-        Desconectar Sistema
+        <span v-if="!colapsado">Desconectar Sistema</span>
+        <span v-else>🚪</span>
       </button>
     </div>
 

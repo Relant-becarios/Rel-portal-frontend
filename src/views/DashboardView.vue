@@ -3,6 +3,9 @@ import { ref, computed, onMounted, watch } from 'vue'
 import Sidebar from '../components/Sidebar.vue'
 import { useQuery, useMutation } from '@vue/apollo-composable'
 import { gql } from '@apollo/client/core'
+import { useRouter } from 'vue-router'
+
+const router = useRouter()
 
 const obtenerFechaHoyLocal = () => {
   const hoy = new Date()
@@ -16,7 +19,6 @@ const filtroEstado = ref('TODOS')
 const busquedaQuery = ref('')
 const esModoOscuro = ref(true)
 const comentarioAdmin = ref('')
-const menuMovilAbierto = ref(false)
 
 // Campos del formulario
 const correoDestinatario = ref('')
@@ -120,26 +122,9 @@ const ocultarSugerenciasConRetraso = () => {
   setTimeout(() => { mostrarSugerencias.value = false }, 200)
 }
 
-const manejarSubidaArchivosMultiples = (event: Event) => {
-  const target = event.target as HTMLInputElement
-  const files = target.files
-  if (!files || files.length === 0) return
-
-  listaArchivosBase64.value = []
-  Array.from(files).forEach((file) => {
-    if (file.size > 200 * 1024 * 1024) {
-      alert(`⚠️ El archivo "${file.name}" supera el límite de 200MB.`)
-      return
-    }
-    const reader = new FileReader()
-    reader.onload = () => {
-      listaArchivosBase64.value.push({
-        nombre: file.name,
-        data: reader.result as string
-      })
-    }
-    reader.readAsDataURL(file)
-  })
+const toggleTema = () => {
+  esModoOscuro.value = !esModoOscuro.value
+  localStorage.setItem('relant_theme', esModoOscuro.value ? 'oscuro' : 'claro')
 }
 
 const parsearFecha = (fecha: any) => {
@@ -172,15 +157,10 @@ onMounted(() => {
   cargarProyectosFirebase()
 })
 
-const toggleTema = () => {
-  esModoOscuro.value = !esModoOscuro.value
-  localStorage.setItem('relant_theme', esModoOscuro.value ? 'oscuro' : 'claro')
-}
-
 // GRAPHQL
 const OBTENER_DATOS_DASHBOARD = gql`
   query GetDashboardData {
-    me { id nombre email rol }
+    me { id nombre email rol fotoUrl }
     todosUsuarios { id nombre email }
     misTickets {
       id titulo descripcion estado comentario_admin fecha_recibido fecha_trabajando fecha_completado fecha_evaluacion creadorId asignadoId chat archivo archivos prioridad proyecto horasEstimadas devoluciones
@@ -189,7 +169,7 @@ const OBTENER_DATOS_DASHBOARD = gql`
     }
   }
 `
-const { result, loading, error, refetch } = useQuery<{ me: any, todosUsuarios: Usuario[], misTickets: any[] }>(OBTENER_DATOS_DASHBOARD)
+const { result, loading, refetch } = useQuery<{ me: any, todosUsuarios: Usuario[], misTickets: any[] }>(OBTENER_DATOS_DASHBOARD)
 
 const CREAR_TICKET = gql`
   mutation NuevoTicket($titulo: String!, $descripcion: String!, $asignadosEmails: [String], $archivos: [String], $prioridad: String, $proyecto: String, $horasEstimadas: Int) {
@@ -357,7 +337,6 @@ const manejarEnviarTicket = async () => {
   } catch (err: any) { alert('Error: ' + err.message) }
 }
 
-// 🛡️ FILTRO DE PRIVACIDAD MULTI-CRITERIO (ID, EMAIL Y NOMBRE)
 const ticketsFiltradosConPrivacidad = computed(() => {
   const tickets = result.value?.misTickets || []
   const miIdPrisma = result.value?.me?.id || ''
@@ -456,29 +435,46 @@ const cerrarWorkspace = () => {
 <template>
   <div :class="esModoOscuro ? 'bg-zinc-950 text-zinc-100' : 'bg-slate-50 text-slate-800'" class="flex min-h-screen transition-colors duration-200 relative font-sans">
     
-    <div :class="[menuMovilAbierto ? 'translate-x-0' : '-translate-x-full', 'lg:translate-x-0 fixed lg:sticky top-0 left-0 h-screen z-50 transition-transform duration-300 shrink-0']">
-      <Sidebar :dark="esModoOscuro" />
-    </div>
+    <!-- Sidebar -->
+    <Sidebar :dark="esModoOscuro" />
 
-    <div v-if="menuMovilAbierto" @click="menuMovilAbierto = false" class="lg:hidden fixed inset-0 bg-black/60 z-40"></div>
-    
-    <div class="flex-1 flex flex-col min-w-0 w-full">
+    <div class="flex-1 flex flex-col min-w-0 w-full relative">
+      
+      <!-- 🟠 TOP-RIGHT: HEADER CON TARJETA DE PERFIL EN LA ESQUINA SUPERIOR DERECHA -->
       <header :class="esModoOscuro ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-slate-200'" class="h-16 border-b px-4 sm:px-8 flex justify-between items-center shrink-0">
         <div class="flex items-center space-x-2 sm:space-x-3 min-w-0">
-          <button @click="menuMovilAbierto = !menuMovilAbierto" class="lg:hidden p-1.5 rounded-xl border border-zinc-800 text-zinc-400">
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
-          </button>
           <span class="text-[10px] sm:text-xs font-black bg-red-700 text-white px-2 py-0.5 rounded-md tracking-wider">RELANT HQ</span>
           <h2 class="text-sm sm:text-lg font-black tracking-tight truncate">Mesa de Control</h2>
         </div>
-        <div class="flex items-center space-x-2 sm:space-x-4">
-          <button @click="toggleTema" :class="esModoOscuro ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-slate-100 border-slate-300 text-slate-800'" class="px-2.5 sm:px-4 py-1 sm:py-2 rounded-xl border text-[10px] sm:text-xs font-semibold cursor-pointer">
-            {{ esModoOscuro ? '☀️ Claro' : '🌙 Oscuro' }}
-          </button>
+
+        <!-- 👤 TARJETA DE PERFIL CLICKEABLE (TOP-RIGHT) -->
+        <div 
+          @click="router.push('/perfil')" 
+          :class="esModoOscuro ? 'bg-zinc-950/80 border-zinc-800/80 hover:border-red-600/60 hover:bg-zinc-900' : 'bg-slate-50 border-slate-200 hover:border-red-500/60 hover:bg-slate-100'"
+          class="flex items-center space-x-3 px-3.5 py-1.5 rounded-2xl border cursor-pointer transition-all shadow-sm group"
+          title="Ver y Configurar mi Perfil"
+        >
+          <!-- Foto / Avatar / Inicial -->
+          <div class="w-8 h-8 rounded-full overflow-hidden border-2 border-red-600 bg-zinc-800 flex items-center justify-center shrink-0 shadow-sm">
+            <img v-if="result?.me?.fotoUrl" :src="result.me.fotoUrl" alt="Avatar" class="w-full h-full object-cover" />
+            <span v-else class="text-xs font-black text-white">
+              {{ result?.me?.nombre?.charAt(0).toUpperCase() || '👤' }}
+            </span>
+          </div>
+
+          <!-- Nombre del usuario -->
+          <div class="hidden sm:flex flex-col text-left min-w-0">
+            <span class="text-xs font-bold truncate group-hover:text-red-500 transition-colors" :class="esModoOscuro ? 'text-zinc-200' : 'text-slate-800'">
+              {{ result?.me?.nombre || 'Mi Perfil' }}
+            </span>
+            <span class="text-[9px] font-mono text-emerald-500 font-bold leading-none">
+              ● Operador Activo
+            </span>
+          </div>
         </div>
       </header>
 
-      <main class="flex-1 overflow-y-auto p-4 sm:p-8 space-y-6 sm:space-y-8 w-full max-w-7xl mx-auto">
+      <main class="flex-1 overflow-y-auto p-4 sm:p-8 space-y-6 sm:space-y-8 w-full max-w-7xl mx-auto pb-24">
         
         <!-- WORKSPACE MODAL (CHAT / PANEL DE DETALLES) -->
         <div v-if="ticketActivoWorkspace" class="fixed inset-0 bg-zinc-950/80 backdrop-blur-md z-50 flex items-center justify-center p-0 sm:p-4">
@@ -573,7 +569,7 @@ const cerrarWorkspace = () => {
           </div>
         </div>
 
-        <!-- 📊 MÓDULO VISIBLE: EXPORTAR REPORTES OPERACIONALES -->
+        <!-- 📊 MÓDULO EXPORTAR REPORTES OPERACIONALES -->
         <div :class="esModoOscuro ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-slate-200 shadow-sm'" class="w-full rounded-2xl border overflow-hidden text-left">
           <div :class="esModoOscuro ? 'border-zinc-800 bg-zinc-950/40' : 'border-slate-200 bg-slate-50/50'" class="p-3 sm:p-4 border-b flex items-center justify-between">
             <h3 class="text-xs font-black tracking-wider uppercase">📊 Exportar Reporte Operacional</h3>
@@ -716,7 +712,7 @@ const cerrarWorkspace = () => {
                 <p :class="esModoOscuro ? 'bg-zinc-950/40 border-zinc-800/40 text-zinc-300' : 'bg-slate-50 border-slate-200 text-slate-700'" class="text-xs mt-2 whitespace-pre-line p-3 rounded-xl border leading-relaxed text-left">{{ ticket.descripcion }}</p>
               </div>
 
-              <!-- 🛠️ BOTONES DE ACCIÓN PARA TODOS LOS ESTADOS (INCLUYENDO HISTORIAL) -->
+              <!-- BOTONES DE ACCIÓN PARA TODOS LOS ESTADOS -->
               <div class="shrink-0 flex gap-2 w-full md:w-auto">
                 <button v-if="ticket.estado === 'RECIBIDO'" @click="activarProcesamientoTicket(ticket)" class="bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold px-4 py-2.5 rounded-xl cursor-pointer w-full md:w-auto">🛠️ Procesar Requerimiento</button>
                 <button v-if="ticket.estado === 'TRABAJANDO'" @click="ticketIdActivo = ticket.id" class="bg-red-700 hover:bg-red-800 text-white text-xs font-bold px-4 py-2.5 rounded-xl cursor-pointer w-full md:w-auto">💼 Abrir Panel / Chat</button>
@@ -729,6 +725,18 @@ const cerrarWorkspace = () => {
         </div>
 
       </main>
+
+      <!-- ☀️/🌙 BOTÓN FLOTANTE EN LA ZONA INFERIOR DERECHA -->
+      <button 
+        @click="toggleTema" 
+        :class="esModoOscuro ? 'bg-zinc-900 border-zinc-700 text-white hover:bg-zinc-800' : 'bg-white border-slate-300 text-slate-800 hover:bg-slate-100'"
+        class="fixed bottom-6 right-6 z-40 px-4 py-2.5 rounded-2xl border shadow-2xl text-xs font-black flex items-center gap-2 cursor-pointer transition-all hover:scale-105"
+        title="Cambiar tema de la aplicación"
+      >
+        <span>{{ esModoOscuro ? '☀️' : '🌙' }}</span>
+        <span>{{ esModoOscuro ? 'Claro' : 'Oscuro' }}</span>
+      </button>
+
     </div>
   </div>
 </template>

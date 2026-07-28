@@ -2,7 +2,6 @@ import { createRouter, createWebHistory } from 'vue-router'
 import { auth } from '../firebase'
 import { onAuthStateChanged } from 'firebase/auth'
 
-// Función auxiliar para esperar a que Firebase nos diga si hay sesión activa
 const obtenerUsuarioActual = () => {
   return new Promise((resolve) => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
@@ -38,7 +37,13 @@ const routes = [
   {
     path: '/graficas',
     name: 'Graficas',
-    component: () => import('../views/GraficasView.vue'), // 👈 corregido: "V" mayúscula
+    component: () => import('../views/GraficasView.vue'),
+    meta: { requiereAuth: true }
+  },
+  {
+    path: '/perfil',
+    name: 'Perfil',
+    component: () => import('../views/PerfilView.vue'),
     meta: { requiereAuth: true }
   },
   {
@@ -46,12 +51,6 @@ const routes = [
     name: 'Login',
     component: () => import('../views/LoginView.vue'),
     meta: { requiereInvitado: true }
-  },
-  {
-    path: '/perfil',
-    name: 'Perfil',
-    component: () => import('../views/PerfilView.vue'),
-    meta: { requiereAuth: true }
   },
   {
     path: '/forgot-password',
@@ -66,7 +65,6 @@ const router = createRouter({
   routes
 })
 
-// Guardia de seguridad de las rutas (Navigation Guards)
 router.beforeEach(async (to, from, next) => {
   const usuario = await obtenerUsuarioActual()
 
