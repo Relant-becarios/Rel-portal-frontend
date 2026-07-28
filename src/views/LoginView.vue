@@ -2,42 +2,45 @@
 import { ref } from 'vue'
 import { auth } from '../firebase'
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth'
-import { useMutation } from '@vue/apollo-composable' // <-- CORREGIDO: Se eliminó el "vue-" extra
+import { useMutation } from '@vue/apollo-composable'
 import { gql } from '@apollo/client/core'
 import { useRouter } from 'vue-router'
+import { apolloClient } from '../main' // 👈 nuevo import
 
-const router = useRouter() //[cite: 8]
-const esLogin = ref(true) //[cite: 8]
-const email = ref('') //[cite: 8]
-const password = ref('') //[cite: 8]
-const nombre = ref('') //[cite: 8]
-const rol = ref('EMPLEADO') //[cite: 8]
+const router = useRouter()
+const esLogin = ref(true)
+const email = ref('')
+const password = ref('')
+const nombre = ref('')
+const rol = ref('EMPLEADO')
 
 const REGISTRAR_USUARIO_MUTATION = gql`
   mutation NuevoUsuario($nombre: String!, $rol: Role!) {
     registrarUsuario(nombre: $nombre, rol: $rol) { id }
   }
-` //[cite: 8]
-const { mutate: registrarEnPostgres } = useMutation(REGISTRAR_USUARIO_MUTATION) //[cite: 8]
+`
+const { mutate: registrarEnPostgres } = useMutation(REGISTRAR_USUARIO_MUTATION)
 
 const manejarLogin = async () => {
   try {
-    await signInWithEmailAndPassword(auth, email.value, password.value) //[cite: 8]
-    router.push('/home') //[cite: 8]
+    await signInWithEmailAndPassword(auth, email.value, password.value)
+    await apolloClient.clearStore() // 👈 limpia caché del usuario anterior
+    router.push('/home')
   } catch (err: any) {
-    alert('Error al autenticar: ' + err.message) //[cite: 8]
+    alert('Error al autenticar: ' + err.message)
   }
 }
 
 const manejarRegistro = async () => {
-  if (!nombre.value || !email.value || !password.value) return //[cite: 8]
+  if (!nombre.value || !email.value || !password.value) return
   try {
-    await createUserWithEmailAndPassword(auth, email.value, password.value) //[cite: 8]
-    await registrarEnPostgres({ nombre: nombre.value, rol: rol.value }) //[cite: 8]
-    alert('¡Cuenta de empleado creada con éxito!') //[cite: 8]
-    esLogin.value = true //[cite: 8]
+    await createUserWithEmailAndPassword(auth, email.value, password.value)
+    await apolloClient.clearStore() // 👈 también aquí, por si había sesión previa
+    await registrarEnPostgres({ nombre: nombre.value, rol: rol.value })
+    alert('¡Cuenta de empleado creada con éxito!')
+    esLogin.value = true
   } catch (err: any) {
-    alert('Error en el registro: ' + err.message) //[cite: 8]
+    alert('Error en el registro: ' + err.message)
   }
 }
 </script>
@@ -62,7 +65,6 @@ const manejarRegistro = async () => {
           <label class="block text-[10px] font-black text-slate-500 uppercase tracking-widest">Clave de Acceso</label>
           <input v-model="password" type="password" required class="mt-2 block w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 text-sm focus:outline-hidden focus:border-indigo-600 transition-all" placeholder="••••••••" />
           
-          <!-- 🔗 NUEVO ENLACE ADICIONADO ABAJO DE LA CONTRASEÑA -->
           <div class="mt-2 text-right">
             <router-link to="/forgot-password" class="text-xs font-bold text-indigo-600 hover:underline">
               ¿Olvidaste tu contraseña?

@@ -30,7 +30,7 @@ const authLink = setContext(async (_, { headers }) => {
 })
 
 // 3. Inicializar el cliente Apollo uniendo el link de autenticación
-const apolloClient = new ApolloClient({
+export const apolloClient = new ApolloClient({ // 👈 se agregó "export"
   link: authLink.concat(httpLink),
   cache: new InMemoryCache(),
 })

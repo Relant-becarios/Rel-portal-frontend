@@ -2,6 +2,7 @@
 import { useRouter } from 'vue-router'
 import { auth } from '../firebase'
 import { signOut } from 'firebase/auth'
+import { apolloClient } from '../main' // 👈 nuevo import
 
 defineProps<{
   dark?: boolean
@@ -12,6 +13,7 @@ const usuarioActual = auth.currentUser
 
 const cerrarSesion = async () => {
   try {
+    await apolloClient.clearStore() // 👈 limpia caché ANTES de cerrar sesión
     await signOut(auth)
     router.push('/login')
   } catch (error) {
@@ -25,10 +27,8 @@ const cerrarSesion = async () => {
     :class="dark ? 'bg-zinc-900 border-zinc-800 text-zinc-100' : 'bg-white border-slate-200 text-slate-800'"
     class="w-64 h-screen border-r flex flex-col justify-between p-4 shrink-0 select-none font-sans"
   >
-    <!-- 🔝 SECCIÓN SUPERIOR: LOGO Y BOTONES -->
     <div class="space-y-6">
       
-      <!-- Logo Relant -->
       <div class="flex items-center space-x-3 px-2 pt-2">
         <div class="w-8 h-8 bg-red-700 rounded-xl flex items-center justify-center font-black text-white text-lg shadow-md">
           R
@@ -36,7 +36,6 @@ const cerrarSesion = async () => {
         <span class="font-black tracking-tight text-base">Relant Portal</span>
       </div>
 
-      <!-- 📂 MENÚ DE NAVEGACIÓN -->
       <nav class="space-y-1.5">
         <router-link 
           to="/home" 
@@ -81,7 +80,6 @@ const cerrarSesion = async () => {
       </nav>
     </div>
 
-    <!-- 🔻 SECCIÓN INFERIOR: USUARIO Y CERRAR SESIÓN -->
     <div class="space-y-3 border-t pt-4" :class="dark ? 'border-zinc-800' : 'border-slate-100'">
       <div class="flex items-center space-x-3 p-2 rounded-xl" :class="dark ? 'bg-zinc-950/60 border border-zinc-800/80' : 'bg-slate-50 border border-slate-200'">
         <div class="w-8 h-8 rounded-lg bg-red-950/80 border border-red-900/60 text-red-400 flex items-center justify-center text-xs font-black shrink-0">
