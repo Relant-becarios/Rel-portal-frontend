@@ -230,17 +230,18 @@ const ejecutarCambioPrioridad = async (ticketId: string, nuevaPrioridad: string)
   } catch (err: any) { alert('Error: ' + err.message) }
 }
 
-// 📊 LÓGICA DE EXPORTACIÓN DE REPORTES
+// 📊 REPORTES (EXCEL Y PDF)
 const obtenerTicketsFiltradosReporte = () => {
   const tickets = result.value?.misTickets || []
   const miIdPrisma = result.value?.me?.id || ''
   const miEmail = result.value?.me?.email?.toLowerCase() || ''
+  const miNombre = result.value?.me?.nombre?.toLowerCase() || ''
 
   let baseTickets = tickets.filter((t: any) => 
     t.asignadoId === miIdPrisma || 
     t.creadorId === miIdPrisma ||
-    t.creador?.email?.toLowerCase() === miEmail ||
-    t.asignado?.email?.toLowerCase() === miEmail
+    (miEmail && (t.creador?.email?.toLowerCase() === miEmail || t.asignado?.email?.toLowerCase() === miEmail)) ||
+    (miNombre && (t.creador?.nombre?.toLowerCase() === miNombre || t.asignado?.nombre?.toLowerCase() === miNombre))
   )
 
   const inicioDate = new Date(fechaInicioReporte.value + 'T00:00:00')
@@ -356,17 +357,23 @@ const manejarEnviarTicket = async () => {
   } catch (err: any) { alert('Error: ' + err.message) }
 }
 
+// 🛡️ FILTRO DE PRIVACIDAD MULTI-CRITERIO (ID, EMAIL Y NOMBRE)
 const ticketsFiltradosConPrivacidad = computed(() => {
   const tickets = result.value?.misTickets || []
   const miIdPrisma = result.value?.me?.id || ''
   const miEmail = result.value?.me?.email?.toLowerCase() || ''
+  const miNombre = result.value?.me?.nombre?.toLowerCase() || ''
 
-  let filtrados = tickets.filter((t: any) => 
-    t.asignadoId === miIdPrisma || 
-    t.creadorId === miIdPrisma ||
-    t.creador?.email?.toLowerCase() === miEmail ||
-    t.asignado?.email?.toLowerCase() === miEmail
-  )
+  let filtrados = tickets.filter((t: any) => {
+    const esCreadorId = t.creadorId === miIdPrisma
+    const esAsignadoId = t.asignadoId === miIdPrisma
+    const esCreadorEmail = miEmail && t.creador?.email?.toLowerCase() === miEmail
+    const esAsignadoEmail = miEmail && t.asignado?.email?.toLowerCase() === miEmail
+    const esCreadorNombre = miNombre && t.creador?.nombre?.toLowerCase() === miNombre
+    const esAsignadoNombre = miNombre && t.asignado?.nombre?.toLowerCase() === miNombre
+
+    return esCreadorId || esAsignadoId || esCreadorEmail || esAsignadoEmail || esCreadorNombre || esAsignadoNombre
+  })
 
   if (filtroEstado.value === 'PENDIENTES') {
     filtrados = filtrados.filter((t: any) => t.estado === 'RECIBIDO' || t.estado === 'TRABAJANDO')
@@ -566,7 +573,7 @@ const cerrarWorkspace = () => {
           </div>
         </div>
 
-        <!-- 📊 MÓDULO RESTAURADO: EXPORTAR REPORTES OPERACIONALES -->
+        <!-- 📊 MÓDULO VISIBLE: EXPORTAR REPORTES OPERACIONALES -->
         <div :class="esModoOscuro ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-slate-200 shadow-sm'" class="w-full rounded-2xl border overflow-hidden text-left">
           <div :class="esModoOscuro ? 'border-zinc-800 bg-zinc-950/40' : 'border-slate-200 bg-slate-50/50'" class="p-3 sm:p-4 border-b flex items-center justify-between">
             <h3 class="text-xs font-black tracking-wider uppercase">📊 Exportar Reporte Operacional</h3>
