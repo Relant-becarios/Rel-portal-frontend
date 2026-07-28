@@ -210,7 +210,6 @@ const ejecutarCambioPrioridad = async (ticketId: string, nuevaPrioridad: string)
   } catch (err: any) { alert('Error: ' + err.message) }
 }
 
-// 📊 REPORTES (EXCEL Y PDF)
 const obtenerTicketsFiltradosReporte = () => {
   const tickets = result.value?.misTickets || []
   const miIdPrisma = result.value?.me?.id || ''
@@ -433,20 +432,22 @@ const cerrarWorkspace = () => {
 </script>
 
 <template>
-  <div :class="esModoOscuro ? 'bg-zinc-950 text-zinc-100' : 'bg-slate-50 text-slate-800'" class="flex min-h-screen transition-colors duration-200 relative font-sans">
+  <!-- 📌 h-screen overflow-hidden: Evita que el contenedor raíz se desplace completo -->
+  <div :class="esModoOscuro ? 'bg-zinc-950 text-zinc-100' : 'bg-slate-50 text-slate-800'" class="flex h-screen overflow-hidden transition-colors duration-200 relative font-sans">
     
+    <!-- Sidebar fija -->
     <Sidebar :dark="esModoOscuro" />
 
-    <div class="flex-1 flex flex-col min-w-0 w-full relative">
+    <div class="flex-1 flex flex-col min-w-0 h-screen overflow-hidden relative">
       
-      <!-- 🟠 HEADER CON PERFIL HOMOGÉNEO (TOP-RIGHT) -->
+      <!-- HEADER FIX -->
       <header :class="esModoOscuro ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-slate-200'" class="h-16 border-b px-4 sm:px-8 flex justify-between items-center shrink-0">
         <div class="flex items-center space-x-2 sm:space-x-3 min-w-0">
           <span class="text-[10px] sm:text-xs font-black bg-red-700 text-white px-2 py-0.5 rounded-md tracking-wider">RELANT HQ</span>
           <h2 class="text-sm sm:text-lg font-black tracking-tight truncate">Mesa de Control</h2>
         </div>
 
-        <!-- 👤 TARJETA DE PERFIL CON DISEÑO INTEGRADO -->
+        <!-- 👤 TARJETA DE PERFIL (TOP-RIGHT) -->
         <div 
           @click="router.push('/perfil')" 
           :class="esModoOscuro ? 'bg-zinc-900 hover:bg-zinc-800 border-zinc-800/80 text-white' : 'bg-white hover:bg-slate-100 border-slate-200 text-slate-800'"
@@ -471,6 +472,7 @@ const cerrarWorkspace = () => {
         </div>
       </header>
 
+      <!-- 📌 MAIN CON SCROLL INTERNO (overflow-y-auto) -->
       <main class="flex-1 overflow-y-auto p-4 sm:p-8 space-y-6 sm:space-y-8 w-full max-w-7xl mx-auto pb-24">
         
         <!-- WORKSPACE MODAL -->
@@ -554,7 +556,7 @@ const cerrarWorkspace = () => {
           </div>
         </div>
 
-        <!-- 📊 EXPORTAR REPORTES -->
+        <!-- 📊 REPORTES -->
         <div :class="esModoOscuro ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-slate-200 shadow-sm'" class="w-full rounded-2xl border overflow-hidden text-left">
           <div :class="esModoOscuro ? 'border-zinc-800 bg-zinc-950/40' : 'border-slate-200 bg-slate-50/50'" class="p-3 sm:p-4 border-b flex items-center justify-between">
             <h3 class="text-xs font-black tracking-wider uppercase">📊 Exportar Reporte Operacional</h3>
@@ -573,7 +575,7 @@ const cerrarWorkspace = () => {
           </div>
         </div>
 
-        <!-- GENERAR REQUERIMIENTO -->
+        <!-- FORMULARIO DE TICKET -->
         <div :class="esModoOscuro ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-slate-200 shadow-sm'" class="w-full rounded-2xl border overflow-hidden text-left">
           <div class="bg-red-700 p-3 sm:p-4 text-white">
             <h3 class="text-xs font-black tracking-wider uppercase">Generar Requerimiento Dirigido</h3>

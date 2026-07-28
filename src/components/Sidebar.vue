@@ -26,11 +26,12 @@ const cerrarSesion = async () => {
 </script>
 
 <template>
+  <!-- 📌 Fijo en pantalla completa (sticky top-0 h-screen) -->
   <aside 
     :class="[
       colapsado ? 'w-20' : 'w-64',
       dark ? 'bg-zinc-900 border-zinc-800 text-zinc-100' : 'bg-white border-slate-200 text-slate-800',
-      'h-screen border-r flex flex-col justify-between p-4 shrink-0 select-none font-sans transition-all duration-300 relative'
+      'h-screen sticky top-0 border-r flex flex-col justify-between p-4 shrink-0 select-none font-sans transition-all duration-300 z-30'
     ]"
   >
     <div class="space-y-6">
@@ -43,7 +44,6 @@ const cerrarSesion = async () => {
           <span class="font-black tracking-tight text-base truncate">Relant Portal</span>
         </div>
 
-        <!-- 🍔 BOTÓN HAMBURGUESA COLAPSABLE -->
         <button 
           @click="toggleColapsar" 
           :class="dark ? 'hover:bg-zinc-800 text-zinc-400 hover:text-white' : 'hover:bg-slate-100 text-slate-600 hover:text-slate-900'"
