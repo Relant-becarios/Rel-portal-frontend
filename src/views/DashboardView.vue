@@ -435,26 +435,24 @@ const cerrarWorkspace = () => {
 <template>
   <div :class="esModoOscuro ? 'bg-zinc-950 text-zinc-100' : 'bg-slate-50 text-slate-800'" class="flex min-h-screen transition-colors duration-200 relative font-sans">
     
-    <!-- Sidebar -->
     <Sidebar :dark="esModoOscuro" />
 
     <div class="flex-1 flex flex-col min-w-0 w-full relative">
       
-      <!-- 🟠 TOP-RIGHT: HEADER CON TARJETA DE PERFIL EN LA ESQUINA SUPERIOR DERECHA -->
+      <!-- 🟠 HEADER CON PERFIL HOMOGÉNEO (TOP-RIGHT) -->
       <header :class="esModoOscuro ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-slate-200'" class="h-16 border-b px-4 sm:px-8 flex justify-between items-center shrink-0">
         <div class="flex items-center space-x-2 sm:space-x-3 min-w-0">
           <span class="text-[10px] sm:text-xs font-black bg-red-700 text-white px-2 py-0.5 rounded-md tracking-wider">RELANT HQ</span>
           <h2 class="text-sm sm:text-lg font-black tracking-tight truncate">Mesa de Control</h2>
         </div>
 
-        <!-- 👤 TARJETA DE PERFIL CLICKEABLE (TOP-RIGHT) -->
+        <!-- 👤 TARJETA DE PERFIL CON DISEÑO INTEGRADO -->
         <div 
           @click="router.push('/perfil')" 
-          :class="esModoOscuro ? 'bg-zinc-950/80 border-zinc-800/80 hover:border-red-600/60 hover:bg-zinc-900' : 'bg-slate-50 border-slate-200 hover:border-red-500/60 hover:bg-slate-100'"
-          class="flex items-center space-x-3 px-3.5 py-1.5 rounded-2xl border cursor-pointer transition-all shadow-sm group"
+          :class="esModoOscuro ? 'bg-zinc-900 hover:bg-zinc-800 border-zinc-800/80 text-white' : 'bg-white hover:bg-slate-100 border-slate-200 text-slate-800'"
+          class="flex items-center space-x-3 px-3 py-1.5 rounded-2xl border cursor-pointer transition-all shadow-sm group"
           title="Ver y Configurar mi Perfil"
         >
-          <!-- Foto / Avatar / Inicial -->
           <div class="w-8 h-8 rounded-full overflow-hidden border-2 border-red-600 bg-zinc-800 flex items-center justify-center shrink-0 shadow-sm">
             <img v-if="result?.me?.fotoUrl" :src="result.me.fotoUrl" alt="Avatar" class="w-full h-full object-cover" />
             <span v-else class="text-xs font-black text-white">
@@ -462,9 +460,8 @@ const cerrarWorkspace = () => {
             </span>
           </div>
 
-          <!-- Nombre del usuario -->
           <div class="hidden sm:flex flex-col text-left min-w-0">
-            <span class="text-xs font-bold truncate group-hover:text-red-500 transition-colors" :class="esModoOscuro ? 'text-zinc-200' : 'text-slate-800'">
+            <span class="text-xs font-bold truncate group-hover:text-red-500 transition-colors">
               {{ result?.me?.nombre || 'Mi Perfil' }}
             </span>
             <span class="text-[9px] font-mono text-emerald-500 font-bold leading-none">
@@ -476,19 +473,15 @@ const cerrarWorkspace = () => {
 
       <main class="flex-1 overflow-y-auto p-4 sm:p-8 space-y-6 sm:space-y-8 w-full max-w-7xl mx-auto pb-24">
         
-        <!-- WORKSPACE MODAL (CHAT / PANEL DE DETALLES) -->
+        <!-- WORKSPACE MODAL -->
         <div v-if="ticketActivoWorkspace" class="fixed inset-0 bg-zinc-950/80 backdrop-blur-md z-50 flex items-center justify-center p-0 sm:p-4">
           <div :class="esModoOscuro ? 'bg-zinc-900 border-zinc-800 text-white' : 'bg-white border-slate-200 text-slate-800'" class="border-0 sm:border rounded-none sm:rounded-3xl w-full max-w-5xl h-full sm:h-[85vh] flex flex-col overflow-hidden shadow-2xl">
-            
             <div :class="esModoOscuro ? 'from-red-950/40 to-zinc-900 border-zinc-800' : 'from-red-50 to-slate-50 border-slate-200'" class="bg-linear-to-r p-4 sm:p-6 border-b flex justify-between items-center shrink-0">
               <div class="min-w-0 pr-2">
                 <span class="text-[10px] font-bold text-red-500 uppercase tracking-widest block">Mesa de Trabajo</span>
                 <h3 class="text-base sm:text-xl font-black mt-0.5 truncate">{{ ticketActivoWorkspace.titulo }}</h3>
               </div>
-              
-              <button @click="cerrarWorkspace" class="font-bold px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl text-xs cursor-pointer bg-zinc-800 text-zinc-400 hover:text-white">
-                ✕ Cerrar
-              </button>
+              <button @click="cerrarWorkspace" class="font-bold px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl text-xs cursor-pointer bg-zinc-800 text-zinc-400 hover:text-white">✕ Cerrar</button>
             </div>
 
             <div class="flex-1 p-4 sm:p-6 grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6 overflow-y-auto content-start">
@@ -518,31 +511,24 @@ const cerrarWorkspace = () => {
                       <template v-if="archivoItem.includes('{')">
                         <div class="flex justify-between items-center text-xs">
                           <span class="font-mono font-bold truncate pr-2" :class="esModoOscuro ? 'text-zinc-300' : 'text-slate-700'">📦 {{ JSON.parse(archivoItem).nombre }}</span>
-                          <a :href="JSON.parse(archivoItem).data" :download="JSON.parse(archivoItem).nombre" class="bg-red-700 hover:bg-red-800 text-white font-bold px-3 py-1 rounded-lg text-[10px] uppercase tracking-wider shrink-0 transition">
-                            Descargar 💾
-                          </a>
+                          <a :href="JSON.parse(archivoItem).data" :download="JSON.parse(archivoItem).nombre" class="bg-red-700 hover:bg-red-800 text-white font-bold px-3 py-1 rounded-lg text-[10px] uppercase tracking-wider shrink-0 transition">Descargar 💾</a>
                         </div>
                       </template>
                       <template v-else-if="archivoItem.startsWith('data:image')">
                         <img :src="archivoItem" alt="Evidencia" class="max-w-full max-h-48 object-contain rounded-lg shadow-md mx-auto" />
                       </template>
                       <template v-else>
-                        <a :href="archivoItem" download="adjunto_ticket" class="bg-red-700 hover:bg-red-800 text-white text-xs font-bold px-4 py-2 rounded-xl flex items-center justify-center gap-2 transition w-full">
-                          📄 Descargar Archivo {{ Number(index) + 1 }}
-                        </a>
+                        <a :href="archivoItem" download="adjunto_ticket" class="bg-red-700 hover:bg-red-800 text-white text-xs font-bold px-4 py-2 rounded-xl flex items-center justify-center gap-2 transition w-full">📄 Descargar Archivo {{ Number(index) + 1 }}</a>
                       </template>
                     </div>
                   </div>
                 </div>
-
               </div>
 
               <div :class="esModoOscuro ? 'bg-zinc-950 border-zinc-800/60' : 'bg-slate-50 border-slate-200'" class="border rounded-2xl p-4 sm:p-5 flex flex-col justify-between overflow-hidden">
                 <h4 class="text-xs font-bold uppercase tracking-widest border-b pb-2" :class="esModoOscuro ? 'text-zinc-400 border-zinc-800' : 'text-slate-500 border-slate-200'">Línea de Tiempo / Chat</h4>
                 <div class="flex-1 my-3 overflow-y-auto space-y-2 pr-1 font-mono text-xs">
-                  <div v-for="(log, i) in bitacoraProgresoAcumulada" :key="i" :class="esModoOscuro ? 'bg-zinc-900 border-zinc-800/40 text-zinc-300' : 'bg-white border-slate-200 text-slate-700'" class="p-2 rounded-lg border wrap-break-word">
-                    {{ log }}
-                  </div>
+                  <div v-for="(log, i) in bitacoraProgresoAcumulada" :key="i" :class="esModoOscuro ? 'bg-zinc-900 border-zinc-800/40 text-zinc-300' : 'bg-white border-slate-200 text-slate-700'" class="p-2 rounded-lg border wrap-break-word">{{ log }}</div>
                 </div>
 
                 <div v-if="ticketActivoWorkspace.estado === 'TRABAJANDO'" class="space-y-3 pt-2 border-t" :class="esModoOscuro ? 'border-zinc-800' : 'border-slate-200'">
@@ -563,13 +549,12 @@ const cerrarWorkspace = () => {
                     <button @click="ejecutarDictamenAdmin(false)" class="bg-red-600 hover:bg-red-700 text-white font-bold text-xs py-2.5 rounded-xl cursor-pointer">✕ Rechazar</button>
                   </div>
                 </div>
-
               </div>
             </div>
           </div>
         </div>
 
-        <!-- 📊 MÓDULO EXPORTAR REPORTES OPERACIONALES -->
+        <!-- 📊 EXPORTAR REPORTES -->
         <div :class="esModoOscuro ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-slate-200 shadow-sm'" class="w-full rounded-2xl border overflow-hidden text-left">
           <div :class="esModoOscuro ? 'border-zinc-800 bg-zinc-950/40' : 'border-slate-200 bg-slate-50/50'" class="p-3 sm:p-4 border-b flex items-center justify-between">
             <h3 class="text-xs font-black tracking-wider uppercase">📊 Exportar Reporte Operacional</h3>
@@ -583,22 +568,17 @@ const cerrarWorkspace = () => {
               <label class="text-[10px] font-black uppercase tracking-wider" :class="esModoOscuro ? 'text-zinc-400' : 'text-slate-500'">Fecha de Fin:</label>
               <input v-model="fechaFinReporte" type="date" :class="esModoOscuro ? 'bg-zinc-950 border-zinc-800 text-white' : 'bg-slate-100 border-slate-300 text-slate-900'" class="p-2.5 text-xs rounded-xl border focus:outline-none" />
             </div>
-            <button @click="descargarReporteExcel" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs uppercase tracking-widest py-3 rounded-xl cursor-pointer shadow-md transition-all">
-              📥 Descargar Excel
-            </button>
-            <button @click="descargarReportePdf" class="w-full bg-red-700 hover:bg-red-800 text-white font-black text-xs uppercase tracking-widest py-3 rounded-xl cursor-pointer shadow-md transition-all">
-              📄 Descargar PDF
-            </button>
+            <button @click="descargarReporteExcel" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs uppercase tracking-widest py-3 rounded-xl cursor-pointer shadow-md transition-all">📥 Descargar Excel</button>
+            <button @click="descargarReportePdf" class="w-full bg-red-700 hover:bg-red-800 text-white font-black text-xs uppercase tracking-widest py-3 rounded-xl cursor-pointer shadow-md transition-all">📄 Descargar PDF</button>
           </div>
         </div>
 
-        <!-- GENERAR REQUERIMIENTO DIRIGIDO -->
+        <!-- GENERAR REQUERIMIENTO -->
         <div :class="esModoOscuro ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-slate-200 shadow-sm'" class="w-full rounded-2xl border overflow-hidden text-left">
           <div class="bg-red-700 p-3 sm:p-4 text-white">
             <h3 class="text-xs font-black tracking-wider uppercase">Generar Requerimiento Dirigido</h3>
           </div>
           <form @submit.prevent="manejarEnviarTicket" class="p-4 sm:p-6 space-y-4">
-            
             <div class="flex items-center border-b pb-2 relative" :class="esModoOscuro ? 'border-zinc-800' : 'border-slate-200'">
               <label class="w-16 text-xs font-bold uppercase" :class="esModoOscuro ? 'text-zinc-400' : 'text-slate-500'">Para:</label>
               <div class="flex-1 relative">
@@ -654,14 +634,12 @@ const cerrarWorkspace = () => {
             <textarea v-model="cuerpoTicket" rows="3" required :class="esModoOscuro ? 'bg-zinc-950 border-zinc-800 text-white' : 'bg-slate-100 border-slate-300 text-slate-800'" class="w-full p-3 sm:p-4 text-sm rounded-xl border focus:outline-none" placeholder="Especificaciones técnicas..."></textarea>
             
             <div class="flex justify-end">
-              <button type="submit" class="w-full sm:w-auto bg-red-700 hover:bg-red-800 text-white font-black text-xs uppercase tracking-widest px-6 py-2.5 rounded-xl cursor-pointer shadow-md">
-                Despachar Ticket
-              </button>
+              <button type="submit" class="w-full sm:w-auto bg-red-700 hover:bg-red-800 text-white font-black text-xs uppercase tracking-widest px-6 py-2.5 rounded-xl cursor-pointer shadow-md">Despachar Ticket</button>
             </div>
           </form>
         </div>
 
-        <!-- 📂 FILTROS Y BUSCADOR -->
+        <!-- 📂 FILTROS -->
         <div :class="esModoOscuro ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-slate-200 shadow-sm'" class="flex flex-col lg:flex-row lg:items-center justify-between gap-4 p-3 sm:p-4 rounded-2xl border">
           <div class="flex items-center space-x-1 overflow-x-auto pb-2 lg:pb-0">
             <button v-for="opcion in [
@@ -683,11 +661,9 @@ const cerrarWorkspace = () => {
           <div v-else-if="ticketsFiltradosConPrivacidad.length === 0" :class="esModoOscuro ? 'bg-zinc-900 border-zinc-800 text-zinc-400' : 'bg-white border-slate-200 text-slate-500'" class="text-center py-16 rounded-2xl text-sm border">No tienes requerimientos en esta sección.</div>
 
           <div v-else v-for="ticket in ticketsFiltradosConPrivacidad" :key="ticket.id" :class="esModoOscuro ? 'bg-zinc-900 border-zinc-800 text-white' : 'bg-white border-slate-200 text-slate-800 shadow-sm'" class="rounded-2xl border p-4 sm:p-6 space-y-4">
-            
             <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 border-b pb-3" :class="esModoOscuro ? 'border-zinc-800' : 'border-slate-200'">
               <div class="flex flex-wrap items-center gap-2 text-[11px] sm:text-xs min-w-0">
                 <span :class="esModoOscuro ? 'bg-zinc-950 border-zinc-800 text-zinc-300' : 'bg-slate-100 border-slate-300 text-slate-700'" class="font-mono font-bold px-2 py-0.5 rounded-md border">{{ 'RLN-' + ticket.id.substring(0,6).toUpperCase() }}</span>
-                
                 <span :class="esModoOscuro ? 'bg-zinc-950/60 border-zinc-800 text-zinc-400' : 'bg-slate-50 border-slate-200 text-slate-600'" class="font-semibold px-2 py-0.5 rounded-md border truncate max-w-full">
                   📩 De: <strong class="text-red-500">{{ ticket.creador?.nombre || ticket.creador?.email || 'Mesa' }}</strong>
                   <span class="opacity-40 mx-0.5">➡️</span>
@@ -712,7 +688,6 @@ const cerrarWorkspace = () => {
                 <p :class="esModoOscuro ? 'bg-zinc-950/40 border-zinc-800/40 text-zinc-300' : 'bg-slate-50 border-slate-200 text-slate-700'" class="text-xs mt-2 whitespace-pre-line p-3 rounded-xl border leading-relaxed text-left">{{ ticket.descripcion }}</p>
               </div>
 
-              <!-- BOTONES DE ACCIÓN PARA TODOS LOS ESTADOS -->
               <div class="shrink-0 flex gap-2 w-full md:w-auto">
                 <button v-if="ticket.estado === 'RECIBIDO'" @click="activarProcesamientoTicket(ticket)" class="bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold px-4 py-2.5 rounded-xl cursor-pointer w-full md:w-auto">🛠️ Procesar Requerimiento</button>
                 <button v-if="ticket.estado === 'TRABAJANDO'" @click="ticketIdActivo = ticket.id" class="bg-red-700 hover:bg-red-800 text-white text-xs font-bold px-4 py-2.5 rounded-xl cursor-pointer w-full md:w-auto">💼 Abrir Panel / Chat</button>
@@ -726,7 +701,7 @@ const cerrarWorkspace = () => {
 
       </main>
 
-      <!-- ☀️/🌙 BOTÓN FLOTANTE EN LA ZONA INFERIOR DERECHA -->
+      <!-- ☀️/🌙 BOTÓN FLOTANTE (BOTTOM-RIGHT) -->
       <button 
         @click="toggleTema" 
         :class="esModoOscuro ? 'bg-zinc-900 border-zinc-700 text-white hover:bg-zinc-800' : 'bg-white border-slate-300 text-slate-800 hover:bg-slate-100'"

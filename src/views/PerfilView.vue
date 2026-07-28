@@ -3,13 +3,21 @@ import { ref, computed, onMounted, watch } from 'vue'
 import Sidebar from '../components/Sidebar.vue'
 import { useQuery, useMutation } from '@vue/apollo-composable'
 import { gql } from '@apollo/client/core'
+import { useRouter } from 'vue-router'
 
+const router = useRouter()
 const esModoOscuro = ref(true)
+
 const nombreUsuario = ref('')
 const descripcionUsuario = ref('')
 const fotoBase64 = ref('')
 const fotoInputRef = ref<HTMLInputElement | null>(null)
 const guardando = ref(false)
+
+const toggleTema = () => {
+  esModoOscuro.value = !esModoOscuro.value
+  localStorage.setItem('relant_theme', esModoOscuro.value ? 'oscuro' : 'claro')
+}
 
 const OBTENER_MI_PERFIL = gql`
   query GetMiPerfil {
@@ -103,11 +111,37 @@ const guardarPerfil = async () => {
     
     <Sidebar :dark="esModoOscuro" />
 
-    <div class="flex-1 flex flex-col min-w-0 w-full">
+    <div class="flex-1 flex flex-col min-w-0 w-full relative">
+      
+      <!-- HEADER CON PERFIL HOMOGÉNEO (TOP-RIGHT) -->
       <header :class="esModoOscuro ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-slate-200'" class="h-16 border-b px-4 sm:px-8 flex items-center justify-between shrink-0">
         <div class="flex items-center space-x-3">
           <span class="text-xs font-black bg-red-700 text-white px-2 py-0.5 rounded-md tracking-wider">RELANT HQ</span>
           <h2 class="text-base sm:text-lg font-black tracking-tight truncate">Configuración de Perfil</h2>
+        </div>
+
+        <!-- 👤 TARJETA DE PERFIL (TOP-RIGHT) -->
+        <div 
+          @click="router.push('/perfil')" 
+          :class="esModoOscuro ? 'bg-zinc-900 hover:bg-zinc-800 border-zinc-800/80 text-white' : 'bg-white hover:bg-slate-100 border-slate-200 text-slate-800'"
+          class="flex items-center space-x-3 px-3 py-1.5 rounded-2xl border cursor-pointer transition-all shadow-sm group"
+          title="Ver y Configurar mi Perfil"
+        >
+          <div class="w-8 h-8 rounded-full overflow-hidden border-2 border-red-600 bg-zinc-800 flex items-center justify-center shrink-0 shadow-sm">
+            <img v-if="usuario?.fotoUrl" :src="usuario.fotoUrl" alt="Avatar" class="w-full h-full object-cover" />
+            <span v-else class="text-xs font-black text-white">
+              {{ usuario?.nombre?.charAt(0).toUpperCase() || '👤' }}
+            </span>
+          </div>
+
+          <div class="hidden sm:flex flex-col text-left min-w-0">
+            <span class="text-xs font-bold truncate group-hover:text-red-500 transition-colors">
+              {{ usuario?.nombre || 'Mi Perfil' }}
+            </span>
+            <span class="text-[9px] font-mono text-emerald-500 font-bold leading-none">
+              ● Operador Activo
+            </span>
+          </div>
         </div>
       </header>
 
@@ -165,6 +199,18 @@ const guardarPerfil = async () => {
           </div>
         </form>
       </main>
+
+      <!-- ☀️/🌙 BOTÓN FLOTANTE (BOTTOM-RIGHT) -->
+      <button 
+        @click="toggleTema" 
+        :class="esModoOscuro ? 'bg-zinc-900 border-zinc-700 text-white hover:bg-zinc-800' : 'bg-white border-slate-300 text-slate-800 hover:bg-slate-100'"
+        class="fixed bottom-6 right-6 z-40 px-4 py-2.5 rounded-2xl border shadow-2xl text-xs font-black flex items-center gap-2 cursor-pointer transition-all hover:scale-105"
+        title="Cambiar tema de la aplicación"
+      >
+        <span>{{ esModoOscuro ? '☀️' : '🌙' }}</span>
+        <span>{{ esModoOscuro ? 'Claro' : 'Oscuro' }}</span>
+      </button>
+
     </div>
   </div>
 </template>

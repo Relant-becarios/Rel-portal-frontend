@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ref } from 'vue'
-import { useRouter, useRoute } from 'vue-router'
+import { ref, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { auth } from '../firebase'
 import { signOut } from 'firebase/auth'
 import { apolloClient } from '../main'
@@ -8,9 +8,6 @@ import { apolloClient } from '../main'
 defineProps<{ dark?: boolean }>()
 
 const router = useRouter()
-const route = useRoute()
-
-// 🍔 Estado colapsado / desplegado del menú
 const colapsado = ref(false)
 
 const toggleColapsar = () => {
@@ -32,11 +29,11 @@ const cerrarSesion = async () => {
   <aside 
     :class="[
       colapsado ? 'w-20' : 'w-64',
-      'bg-zinc-900 border-zinc-800 text-zinc-100 h-screen border-r flex flex-col justify-between p-4 shrink-0 select-none font-sans transition-all duration-300 relative'
+      dark ? 'bg-zinc-900 border-zinc-800 text-zinc-100' : 'bg-white border-slate-200 text-slate-800',
+      'h-screen border-r flex flex-col justify-between p-4 shrink-0 select-none font-sans transition-all duration-300 relative'
     ]"
   >
     <div class="space-y-6">
-      
       <!-- Encabezado con Botón Hamburguesa -->
       <div class="flex items-center justify-between px-2 pt-2">
         <div v-if="!colapsado" class="flex items-center space-x-3 truncate">
@@ -46,10 +43,11 @@ const cerrarSesion = async () => {
           <span class="font-black tracking-tight text-base truncate">Relant Portal</span>
         </div>
 
-        <!-- 🍔 BOTÓN HAMBURGUESA -->
+        <!-- 🍔 BOTÓN HAMBURGUESA COLAPSABLE -->
         <button 
           @click="toggleColapsar" 
-          class="p-2 rounded-xl transition cursor-pointer hover:bg-zinc-800 text-zinc-400 hover:text-white shrink-0 mx-auto"
+          :class="dark ? 'hover:bg-zinc-800 text-zinc-400 hover:text-white' : 'hover:bg-slate-100 text-slate-600 hover:text-slate-900'"
+          class="p-2 rounded-xl transition cursor-pointer shrink-0 mx-auto"
           title="Colapsar / Desplegar menú"
         >
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -58,11 +56,12 @@ const cerrarSesion = async () => {
         </button>
       </div>
 
-      <!-- Menú de Navegación -->
+      <!-- Menú Navegación -->
       <nav class="space-y-1.5">
         <router-link 
           to="/home" 
-          class="flex items-center space-x-3 px-4 py-3 rounded-xl transition text-xs font-bold text-zinc-400 hover:text-white hover:bg-zinc-800/80"
+          class="flex items-center space-x-3 px-4 py-3 rounded-xl transition text-xs font-bold"
+          :class="dark ? 'text-zinc-400 hover:text-white hover:bg-zinc-800/80' : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'"
           active-class="bg-red-700 !text-white font-black shadow-lg"
           :title="colapsado ? 'Inicio' : ''"
         >
@@ -72,7 +71,8 @@ const cerrarSesion = async () => {
 
         <router-link 
           to="/tickets" 
-          class="flex items-center space-x-3 px-4 py-3 rounded-xl transition text-xs font-bold text-zinc-400 hover:text-white hover:bg-zinc-800/80"
+          class="flex items-center space-x-3 px-4 py-3 rounded-xl transition text-xs font-bold"
+          :class="dark ? 'text-zinc-400 hover:text-white hover:bg-zinc-800/80' : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'"
           active-class="bg-red-700 !text-white font-black shadow-lg"
           :title="colapsado ? 'Tickets' : ''"
         >
@@ -84,7 +84,8 @@ const cerrarSesion = async () => {
           href="https://relantapi.netlify.app/" 
           target="_blank" 
           rel="noopener noreferrer"
-          class="flex items-center space-x-3 px-4 py-3 rounded-xl transition text-xs font-bold text-zinc-400 hover:text-white hover:bg-zinc-800/80"
+          class="flex items-center space-x-3 px-4 py-3 rounded-xl transition text-xs font-bold"
+          :class="dark ? 'text-zinc-400 hover:text-white hover:bg-zinc-800/80' : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'"
           :title="colapsado ? 'Gestor de proyectos' : ''"
         >
           <span class="text-base shrink-0">🌐</span>
@@ -94,27 +95,39 @@ const cerrarSesion = async () => {
 
         <router-link 
           to="/graficas" 
-          class="flex items-center space-x-3 px-4 py-3 rounded-xl transition text-xs font-bold text-zinc-400 hover:text-white hover:bg-zinc-800/80"
+          class="flex items-center space-x-3 px-4 py-3 rounded-xl transition text-xs font-bold"
+          :class="dark ? 'text-zinc-400 hover:text-white hover:bg-zinc-800/80' : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'"
           active-class="bg-red-700 !text-white font-black shadow-lg"
           :title="colapsado ? 'Métricas y Gráficas' : ''"
         >
           <span class="text-base shrink-0">📊</span>
           <span v-if="!colapsado" class="truncate">Métricas y Gráficas</span>
         </router-link>
+
+        <router-link 
+          to="/perfil" 
+          class="flex items-center space-x-3 px-4 py-3 rounded-xl transition text-xs font-bold"
+          :class="dark ? 'text-zinc-400 hover:text-white hover:bg-zinc-800/80' : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'"
+          active-class="bg-red-700 !text-white font-black shadow-lg"
+          :title="colapsado ? 'Mi Perfil' : ''"
+        >
+          <span class="text-base shrink-0">👤</span>
+          <span v-if="!colapsado" class="truncate">Mi Perfil</span>
+        </router-link>
       </nav>
     </div>
 
     <!-- Desconectar -->
-    <div class="space-y-3 border-t border-zinc-800 pt-4">
+    <div class="space-y-3 border-t pt-4" :class="dark ? 'border-zinc-800' : 'border-slate-200'">
       <button 
         @click="cerrarSesion"
-        class="w-full py-2.5 px-4 rounded-xl text-xs font-bold transition cursor-pointer text-center bg-zinc-800/50 hover:bg-red-950/40 text-zinc-400 hover:text-red-400"
+        class="w-full py-2.5 px-4 rounded-xl text-xs font-bold transition cursor-pointer text-center"
+        :class="dark ? 'bg-zinc-800/50 hover:bg-red-950/40 text-zinc-400 hover:text-red-400' : 'bg-slate-100 hover:bg-red-50 text-slate-600 hover:text-red-600'"
         :title="colapsado ? 'Desconectar Sistema' : ''"
       >
         <span v-if="!colapsado">Desconectar Sistema</span>
         <span v-else>🚪</span>
       </button>
     </div>
-
   </aside>
 </template>

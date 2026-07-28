@@ -3,10 +3,11 @@ import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import Sidebar from '../components/Sidebar.vue'
 import { useQuery } from '@vue/apollo-composable'
 import { gql } from '@apollo/client/core'
+import { useRouter } from 'vue-router'
 import Chart from 'chart.js/auto'
 
+const router = useRouter()
 const esModoOscuro = ref(true)
-const menuMovilAbierto = ref(false)
 
 const toggleTema = () => {
   esModoOscuro.value = !esModoOscuro.value
@@ -14,7 +15,7 @@ const toggleTema = () => {
   renderizarGraficasDashboard()
 }
 
-// Referencias Canvas
+// Canvas
 const barChartRef = ref<HTMLCanvasElement | null>(null)
 const lineChartRef = ref<HTMLCanvasElement | null>(null)
 const gaugeCalidadRef = ref<HTMLCanvasElement | null>(null)
@@ -31,7 +32,7 @@ let spark2Chart: Chart | null = null
 
 const OBTENER_METRICAS_DETALLADAS = gql`
   query GetMetricasDetalladas {
-    me { id nombre rol }
+    me { id nombre email rol fotoUrl }
     misTickets {
       id
       estado
@@ -44,27 +45,22 @@ const OBTENER_METRICAS_DETALLADAS = gql`
     }
   }
 `
-const { result, loading, error } = useQuery(OBTENER_METRICAS_DETALLADAS)
+const { result, loading } = useQuery(OBTENER_METRICAS_DETALLADAS)
 
 const tickets = computed(() => result.value?.misTickets || [])
 const totalTickets = computed(() => tickets.value.length)
 
 const abiertos = computed(() => tickets.value.filter((t: any) => t.estado === 'RECIBIDO' || t.estado === 'TRABAJANDO').length)
-const enValidacion = computed(() => tickets.value.filter((t: any) => t.estado === 'COMPLETADO').length)
 const concluidos = computed(() => tickets.value.filter((t: any) => t.estado === 'APROBADO' || t.estado === 'RECHAZADO').length)
 
-// 🎯 1. EFICIENCIA DE CALIDAD (PENALIZADA POR CADA DEVOLUCIÓN)
 const eficienciaCalidad = computed(() => {
   if (!totalTickets.value) return 100
   let totalDevoluciones = 0
   tickets.value.forEach((t: any) => { totalDevoluciones += (t.devoluciones || 0) })
-  
-  // Por cada devolución se restan 15% del total de puntos de calidad posibles
   const penalizacion = (totalDevoluciones / totalTickets.value) * 15
   return Math.max(0, Math.round(100 - penalizacion))
 })
 
-// ⏱️ 2. EFICIENCIA DE TIEMPOS / SLA (HORAS OBJETIVO VS REALES)
 const eficienciaSlaTiempos = computed(() => {
   const concluidosList = tickets.value.filter((t: any) => t.fecha_completado)
   if (!concluidosList.length) return 100
@@ -106,7 +102,6 @@ const renderizarGraficasDashboard = async () => {
   const colorTexto = esModoOscuro.value ? '#a1a1aa' : '#475569'
   const colorGrid = esModoOscuro.value ? '#27272a' : '#e2e8f0'
 
-  // BAR CHART
   if (barChartRef.value) {
     barChart = new Chart(barChartRef.value, {
       type: 'bar',
@@ -130,7 +125,6 @@ const renderizarGraficasDashboard = async () => {
     })
   }
 
-  // DUAL LINE CHART
   if (lineChartRef.value) {
     lineChart = new Chart(lineChartRef.value, {
       type: 'line',
@@ -171,7 +165,6 @@ const renderizarGraficasDashboard = async () => {
     })
   }
 
-  // GAUGE CALIDAD DE TRABAJO (DEVOLUCIONES)
   if (gaugeCalidadRef.value) {
     gaugeCalidad = new Chart(gaugeCalidadRef.value, {
       type: 'doughnut',
@@ -193,7 +186,6 @@ const renderizarGraficasDashboard = async () => {
     })
   }
 
-  // GAUGE EFICIENCIA DE TIEMPO (SLA)
   if (gaugeSlaRef.value) {
     gaugeSla = new Chart(gaugeSlaRef.value, {
       type: 'doughnut',
@@ -215,7 +207,6 @@ const renderizarGraficasDashboard = async () => {
     })
   }
 
-  // SPARKINES
   if (spark1Ref.value) {
     spark1Chart = new Chart(spark1Ref.value, {
       type: 'line',
@@ -245,120 +236,104 @@ onMounted(() => {
 <template>
   <div :class="esModoOscuro ? 'bg-zinc-950 text-zinc-100' : 'bg-slate-50 text-slate-800'" class="flex min-h-screen font-sans transition-colors duration-200">
     
-    <div :class="[menuMovilAbierto ? 'translate-x-0' : '-translate-x-full', 'lg:translate-x-0 fixed lg:sticky top-0 left-0 h-screen z-50 transition-transform duration-300 shrink-0']">
-      <Sidebar :dark="esModoOscuro" />
-    </div>
+    <Sidebar :dark="esModoOscuro" />
 
-    <div v-if="menuMovilAbierto" @click="menuMovilAbierto = false" class="lg:hidden fixed inset-0 bg-black/60 z-40"></div>
-
-    <div class="flex-1 flex flex-col min-w-0 w-full">
+    <div class="flex-1 flex flex-col min-w-0 w-full relative">
       
+      <!-- HEADER CON PERFIL HOMOGÉNEO (TOP-RIGHT) -->
       <header :class="esModoOscuro ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-slate-200'" class="h-16 border-b px-4 sm:px-8 flex justify-between items-center shrink-0">
         <div class="flex items-center space-x-2 sm:space-x-3 min-w-0">
-          <button @click="menuMovilAbierto = !menuMovilAbierto" class="lg:hidden p-1.5 rounded-xl border border-zinc-800 text-zinc-400">
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
-          </button>
           <span class="text-[10px] sm:text-xs font-black bg-red-700 text-white px-2 py-0.5 rounded-md tracking-wider">RELANT HQ</span>
           <h2 class="text-sm sm:text-lg font-black tracking-tight truncate">Indicadores de Eficiencia</h2>
         </div>
-        <div class="flex items-center space-x-2 sm:space-x-4">
-          <button @click="toggleTema" :class="esModoOscuro ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-slate-100 border-slate-300 text-slate-800'" class="px-2.5 sm:px-4 py-1 sm:py-2 rounded-xl border text-[10px] sm:text-xs font-semibold cursor-pointer">
-            {{ esModoOscuro ? '☀️ Claro' : '🌙 Oscuro' }}
-          </button>
+
+        <!-- 👤 TARJETA DE PERFIL (TOP-RIGHT) -->
+        <div 
+          @click="router.push('/perfil')" 
+          :class="esModoOscuro ? 'bg-zinc-900 hover:bg-zinc-800 border-zinc-800/80 text-white' : 'bg-white hover:bg-slate-100 border-slate-200 text-slate-800'"
+          class="flex items-center space-x-3 px-3 py-1.5 rounded-2xl border cursor-pointer transition-all shadow-sm group"
+          title="Ver y Configurar mi Perfil"
+        >
+          <div class="w-8 h-8 rounded-full overflow-hidden border-2 border-red-600 bg-zinc-800 flex items-center justify-center shrink-0 shadow-sm">
+            <img v-if="result?.me?.fotoUrl" :src="result.me.fotoUrl" alt="Avatar" class="w-full h-full object-cover" />
+            <span v-else class="text-xs font-black text-white">
+              {{ result?.me?.nombre?.charAt(0).toUpperCase() || '👤' }}
+            </span>
+          </div>
+
+          <div class="hidden sm:flex flex-col text-left min-w-0">
+            <span class="text-xs font-bold truncate group-hover:text-red-500 transition-colors">
+              {{ result?.me?.nombre || 'Mi Perfil' }}
+            </span>
+            <span class="text-[9px] font-mono text-emerald-500 font-bold leading-none">
+              ● Operador Activo
+            </span>
+          </div>
         </div>
       </header>
 
-      <main class="flex-1 overflow-y-auto p-4 sm:p-8 space-y-6 max-w-7xl mx-auto w-full">
+      <main class="flex-1 overflow-y-auto p-4 sm:p-8 space-y-6 max-w-7xl mx-auto w-full pb-24">
         
         <div v-if="loading" class="text-center py-20 text-zinc-500 animate-pulse font-mono text-sm">
           📊 Calculando indicadores operacionales...
         </div>
 
         <div v-else class="space-y-6">
-          
-          <!-- 📈 FILA SUPERIOR: 2 GRÁFICOS PRINCIPALES -->
           <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            
             <div :class="esModoOscuro ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-slate-200 shadow-sm'" class="p-5 sm:p-6 rounded-2xl border flex flex-col">
-              <h3 class="text-xs font-black uppercase tracking-wider text-zinc-400 mb-4">
-                Distribución por Prioridad
-              </h3>
-              <div class="relative h-64 w-full">
-                <canvas ref="barChartRef"></canvas>
-              </div>
+              <h3 class="text-xs font-black uppercase tracking-wider text-zinc-400 mb-4">Distribución por Prioridad</h3>
+              <div class="relative h-64 w-full"><canvas ref="barChartRef"></canvas></div>
             </div>
 
             <div :class="esModoOscuro ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-slate-200 shadow-sm'" class="p-5 sm:p-6 rounded-2xl border flex flex-col">
-              <h3 class="text-xs font-black uppercase tracking-wider text-zinc-400 mb-4">
-                Histórico de Ingresados vs Resueltos
-              </h3>
-              <div class="relative h-64 w-full">
-                <canvas ref="lineChartRef"></canvas>
-              </div>
+              <h3 class="text-xs font-black uppercase tracking-wider text-zinc-400 mb-4">Histórico de Ingresados vs Resueltos</h3>
+              <div class="relative h-64 w-full"><canvas ref="lineChartRef"></canvas></div>
             </div>
-
           </div>
 
-          <!-- 🎯 FILA INFERIOR: INDICADORES DE PRODUCTIVIDAD (CALIDAD Y TIEMPOS) -->
           <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-            
-            <!-- KPI 1: VELOCÍMETRO DE CALIDAD (DEVOLUCIONES) -->
             <div :class="esModoOscuro ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-slate-200 shadow-sm'" class="p-5 rounded-2xl border flex flex-col justify-between">
-              <h4 class="text-[10px] font-black uppercase tracking-wider text-emerald-500">
-                🎯 Eficiencia de Calidad
-              </h4>
+              <h4 class="text-[10px] font-black uppercase tracking-wider text-emerald-500">🎯 Eficiencia de Calidad</h4>
               <div class="relative h-28 w-full flex items-center justify-center mt-2">
                 <canvas ref="gaugeCalidadRef"></canvas>
-                <span class="absolute bottom-1 text-lg font-black text-emerald-500 font-mono">
-                  {{ eficienciaCalidad }}%
-                </span>
+                <span class="absolute bottom-1 text-lg font-black text-emerald-500 font-mono">{{ eficienciaCalidad }}%</span>
               </div>
             </div>
 
-            <!-- KPI 2: VELOCÍMETRO DE TIEMPOS (HORAS SLA) -->
             <div :class="esModoOscuro ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-slate-200 shadow-sm'" class="p-5 rounded-2xl border flex flex-col justify-between">
-              <h4 class="text-[10px] font-black uppercase tracking-wider text-blue-500">
-                ⏱️ Eficiencia de Tiempo (SLA)
-              </h4>
+              <h4 class="text-[10px] font-black uppercase tracking-wider text-blue-500">⏱️ Eficiencia de Tiempo (SLA)</h4>
               <div class="relative h-28 w-full flex items-center justify-center mt-2">
                 <canvas ref="gaugeSlaRef"></canvas>
-                <span class="absolute bottom-1 text-lg font-black text-blue-500 font-mono">
-                  {{ eficienciaSlaTiempos }}%
-                </span>
+                <span class="absolute bottom-1 text-lg font-black text-blue-500 font-mono">{{ eficienciaSlaTiempos }}%</span>
               </div>
             </div>
 
-            <!-- KPI 3: ABIERTOS -->
             <div :class="esModoOscuro ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-slate-200 shadow-sm'" class="p-5 rounded-2xl border flex flex-col justify-between">
-              <h4 class="text-[10px] font-black uppercase tracking-wider text-amber-500">
-                ⏳ En Desarrollo
-              </h4>
-              <div class="text-3xl font-black mt-2 font-mono text-amber-500">
-                {{ abiertos }}
-              </div>
-              <div class="h-12 w-full mt-2">
-                <canvas ref="spark1Ref"></canvas>
-              </div>
+              <h4 class="text-[10px] font-black uppercase tracking-wider text-amber-500">⏳ En Desarrollo</h4>
+              <div class="text-3xl font-black mt-2 font-mono text-amber-500">{{ abiertos }}</div>
+              <div class="h-12 w-full mt-2"><canvas ref="spark1Ref"></canvas></div>
             </div>
 
-            <!-- KPI 4: TOTAL -->
             <div :class="esModoOscuro ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-slate-200 shadow-sm'" class="p-5 rounded-2xl border flex flex-col justify-between">
-              <h4 class="text-[10px] font-black uppercase tracking-wider text-red-500">
-                📋 Total Requerimientos
-              </h4>
-              <div class="text-3xl font-black mt-2 font-mono text-red-500">
-                {{ totalTickets }}
-              </div>
-              <div class="h-12 w-full mt-2">
-                <canvas ref="spark2Ref"></canvas>
-              </div>
+              <h4 class="text-[10px] font-black uppercase tracking-wider text-red-500">📋 Total Requerimientos</h4>
+              <div class="text-3xl font-black mt-2 font-mono text-red-500">{{ totalTickets }}</div>
+              <div class="h-12 w-full mt-2"><canvas ref="spark2Ref"></canvas></div>
             </div>
-
           </div>
-
         </div>
-
       </main>
+
+      <!-- ☀️/🌙 BOTÓN FLOTANTE (BOTTOM-RIGHT) -->
+      <button 
+        @click="toggleTema" 
+        :class="esModoOscuro ? 'bg-zinc-900 border-zinc-700 text-white hover:bg-zinc-800' : 'bg-white border-slate-300 text-slate-800 hover:bg-slate-100'"
+        class="fixed bottom-6 right-6 z-40 px-4 py-2.5 rounded-2xl border shadow-2xl text-xs font-black flex items-center gap-2 cursor-pointer transition-all hover:scale-105"
+        title="Cambiar tema de la aplicación"
+      >
+        <span>{{ esModoOscuro ? '☀️' : '🌙' }}</span>
+        <span>{{ esModoOscuro ? 'Claro' : 'Oscuro' }}</span>
+      </button>
+
     </div>
   </div>
 </template>
