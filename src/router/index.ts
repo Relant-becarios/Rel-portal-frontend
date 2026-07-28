@@ -38,7 +38,7 @@ const routes = [
   {
     path: '/graficas',
     name: 'Graficas',
-    component: () => import('../views/GraficasView.vue'),
+    component: () => import('../views/GraficasView.vue'), // 👈 corregido: "V" mayúscula
     meta: { requiereAuth: true }
   },
   {
@@ -47,7 +47,6 @@ const routes = [
     component: () => import('../views/LoginView.vue'),
     meta: { requiereInvitado: true }
   },
-  // 🔒 NUEVA RUTA DE SEGURIDAD PROTEGIDA
   {
     path: '/forgot-password',
     name: 'ForgotPassword',
@@ -66,11 +65,11 @@ router.beforeEach(async (to, from, next) => {
   const usuario = await obtenerUsuarioActual()
 
   if (to.meta.requiereAuth && !usuario) {
-    next('/login') // Si no está logueado, directo a identificarse
+    next('/login')
   } else if (to.meta.requiereInvitado && usuario) {
-    next('/home')  // Si ya tiene sesión activa, lo mandamos al Home de Relant
+    next('/home')
   } else {
-    next()         // Camino libre
+    next()
   }
 })
 
