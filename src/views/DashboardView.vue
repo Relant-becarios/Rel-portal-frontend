@@ -532,7 +532,7 @@ const cerrarWorkspace = () => {
                       </template>
                       <template v-else>
                         <a :href="archivoItem" download="adjunto_ticket" class="bg-red-700 hover:bg-red-800 text-white text-xs font-bold px-4 py-2 rounded-xl flex items-center justify-center gap-2 transition w-full">
-                          📄 Descargar Archivo {{ index + 1 }}
+                          📄 Descargar Archivo {{ Number(index) + 1 }}
                         </a>
                       </template>
                     </div>
