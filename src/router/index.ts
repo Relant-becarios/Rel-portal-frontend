@@ -38,7 +38,7 @@ const routes = [
   {
     path: '/graficas',
     name: 'Graficas',
-    component: () => import('../views/Graficasview.vue'),
+    component: () => import('../views/GraficasView.vue'),
     meta: { requiereAuth: true }
   },
   {
