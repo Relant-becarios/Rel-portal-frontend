@@ -112,7 +112,8 @@ const datosGrafica7Dias = computed(() => {
       const fechaT = new Date(isNaN(Number(t.fecha_recibido)) ? t.fecha_recibido : Number(t.fecha_recibido))
       const diffDias = Math.floor((hoy.getTime() - fechaT.getTime()) / (1000 * 3600 * 24))
       if (diffDias >= 0 && diffDias < 7) {
-        ingresadosPorDia[6 - diffDias]++
+        const index = 6 - diffDias
+        ingresadosPorDia[index] = (ingresadosPorDia[index] ?? 0) + 1
       }
     }
 
@@ -121,7 +122,8 @@ const datosGrafica7Dias = computed(() => {
       const fechaFin = new Date(isNaN(Number(fechaFinStr)) ? fechaFinStr : Number(fechaFinStr))
       const diffDiasFin = Math.floor((hoy.getTime() - fechaFin.getTime()) / (1000 * 3600 * 24))
       if (diffDiasFin >= 0 && diffDiasFin < 7) {
-        resueltosPorDia[6 - diffDiasFin]++
+        const idx = 6 - diffDiasFin
+        resueltosPorDia[idx] = (resueltosPorDia[idx] ?? 0) + 1
       }
     }
   })
