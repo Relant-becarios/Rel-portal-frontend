@@ -36,6 +36,15 @@ const cerrarSesion = async () => {
         <span class="font-black tracking-tight text-base">Relant Portal</span>
       </div>
 
+      <router-link 
+  to="/perfil" 
+  class="flex items-center space-x-3 px-4 py-3 rounded-xl text-xs font-bold transition hover:bg-zinc-800"
+  active-class="bg-red-700 text-white"
+>
+  <span>👤</span>
+  <span>Mi Perfil</span>
+</router-link>
+
       <nav class="space-y-1.5">
         <router-link 
           to="/home" 

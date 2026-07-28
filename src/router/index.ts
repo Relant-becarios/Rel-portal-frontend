@@ -48,6 +48,12 @@ const routes = [
     meta: { requiereInvitado: true }
   },
   {
+    path: '/perfil',
+    name: 'Perfil',
+    component: () => import('../views/PerfilView.vue'),
+    meta: { requiereAuth: true }
+  },
+  {
     path: '/forgot-password',
     name: 'ForgotPassword',
     component: () => import('../views/ForgotPasswordView.vue'),
