@@ -60,23 +60,26 @@ const OBTENER_TODOS_USUARIOS = gql`
 const { result: usuariosResult } = useQuery<{ todosUsuarios: Usuario[] }>(OBTENER_TODOS_USUARIOS)
 
 const usuariosSugeridos = computed(() => {
-  const query = correoDestinatario.value.trim().toLowerCase()
-  if (!query) return []
+  // 1. Extraemos solo lo escrito después de la última coma
+  const partes = correoDestinatario.value.split(',')
+  const ultimoTexto = partes[partes.length - 1]?.trim().toLowerCase() || ''
+
+  if (!ultimoTexto) return []
+
   const listaCompleta = usuariosResult.value?.todosUsuarios || []
   return listaCompleta.filter((u: Usuario) => 
-    u.nombre.toLowerCase().includes(query) || u.email.toLowerCase().includes(query)
+    u.nombre.toLowerCase().includes(ultimoTexto) || 
+    u.email.toLowerCase().includes(ultimoTexto)
   )
 })
 
 const seleccionarUsuarioSugerido = (usuario: Usuario) => {
-  if (correoDestinatario.value.includes(',')) {
-    const partes = correoDestinatario.value.split(',')
-    partes.pop()
-    partes.push(' ' + usuario.email)
-    correoDestinatario.value = partes.join(',') + ', '
-  } else {
-    correoDestinatario.value = usuario.email + ', '
-  }
+  const partes = correoDestinatario.value.split(',')
+  partes.pop() // Eliminamos el fragmento que se estaba escribiendo
+  partes.push(' ' + usuario.email) // Añadimos el nuevo correo seleccionado
+  
+  // Recomponemos la cadena con comas
+  correoDestinatario.value = partes.join(',').trimStart() + ', '
   mostrarSugerencias.value = false
 }
 
