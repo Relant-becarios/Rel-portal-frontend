@@ -149,6 +149,41 @@ const obtenerColorPrioridad = (prioridad: string) => {
   }
 }
 
+// ⏱️ HELPER: CÁLCULO CIENTÍFICO Y VISUAL DEL TIEMPO / SLA CADA TICKET
+const obtenerResumenTiempoSla = (ticket: any) => {
+  if (!ticket || !ticket.fecha_recibido) return { texto: 'Sin registro', aTiempo: true, badgeColor: 'bg-zinc-800 text-zinc-400' }
+
+  const inicio = parsearFecha(ticket.fecha_recibido)?.getTime() || Date.now()
+  const fin = ticket.fecha_completado || ticket.fecha_evaluacion
+    ? (parsearFecha(ticket.fecha_completado || ticket.fecha_evaluacion)?.getTime() || Date.now())
+    : Date.now()
+
+  const msTranscurridos = Math.max(0, fin - inicio)
+  const horasUsadas = msTranscurridos / (1000 * 60 * 60)
+  const horasLimite = ticket.horasEstimadas || 10
+
+  const horasEnteras = Math.floor(horasUsadas)
+  const minutos = Math.floor((horasUsadas - horasEnteras) * 60)
+
+  const esConcluido = ticket.estado === 'COMPLETADO' || ticket.estado === 'APROBADO' || ticket.estado === 'RECHAZADO'
+  const aTiempo = horasUsadas <= horasLimite
+
+  let textoTiempo = `${horasEnteras}h ${minutos}m`
+  if (!esConcluido) {
+    textoTiempo += ' (En curso)'
+  }
+
+  return {
+    horasUsadas: horasUsadas.toFixed(1),
+    horasLimite,
+    textoTiempo,
+    aTiempo,
+    badgeColor: aTiempo 
+      ? (esModoOscuro.value ? 'bg-emerald-950/60 border-emerald-800/80 text-emerald-400' : 'bg-emerald-50 border-emerald-300 text-emerald-700')
+      : (esModoOscuro.value ? 'bg-red-950/60 border-red-800/80 text-red-400 font-bold' : 'bg-red-50 border-red-300 text-red-700 font-bold')
+  }
+}
+
 onMounted(() => {
   const temaGuardado = localStorage.getItem('relant_theme')
   esModoOscuro.value = temaGuardado ? temaGuardado === 'oscuro' : true
@@ -251,7 +286,7 @@ const descargarReporteExcel = () => {
       <table>
         <thead>
           <tr>
-            <th>Folio</th><th>Título</th><th>Descripción</th><th>Prioridad</th><th>Proyecto</th><th>Estado</th><th>Fecha Recibido</th><th>Creador</th><th>Asignado</th>
+            <th>Folio</th><th>Título</th><th>Descripción</th><th>Prioridad</th><th>Proyecto</th><th>Horas SLA</th><th>Tiempo Consumido</th><th>Estado</th><th>Fecha Recibido</th><th>Creador</th><th>Asignado</th>
           </tr>
         </thead>
         <tbody>
@@ -259,9 +294,10 @@ const descargarReporteExcel = () => {
 
   filtrados.forEach((t: any) => {
     const folio = 'RLN-' + t.id.substring(0, 6).toUpperCase()
+    const infoSla = obtenerResumenTiempoSla(t)
     tablaHtml += `
       <tr>
-        <td>${folio}</td><td>${t.titulo || ''}</td><td>${t.descripcion || ''}</td><td>${t.prioridad || 'BAJA'}</td><td>${t.proyecto || 'General'}</td><td>${t.estado || ''}</td><td>${parsearFecha(t.fecha_recibido)?.toLocaleString() || ''}</td><td>${t.creador?.nombre || t.creador?.email || ''}</td><td>${t.asignado?.nombre || t.asignado?.email || ''}</td>
+        <td>${folio}</td><td>${t.titulo || ''}</td><td>${t.descripcion || ''}</td><td>${t.prioridad || 'BAJA'}</td><td>${t.proyecto || 'General'}</td><td>${infoSla.horasLimite}h</td><td>${infoSla.textoTiempo}</td><td>${t.estado || ''}</td><td>${parsearFecha(t.fecha_recibido)?.toLocaleString() || ''}</td><td>${t.creador?.nombre || t.creador?.email || ''}</td><td>${t.asignado?.nombre || t.asignado?.email || ''}</td>
       </tr>
     `
   })
@@ -291,10 +327,11 @@ const descargarReportePdf = () => {
   
   filtrados.forEach((t: any, index: number) => {
     const folio = 'RLN-' + t.id.substring(0, 6).toUpperCase()
+    const infoSla = obtenerResumenTiempoSla(t)
     itemsHtml += `
       <div style="margin-bottom: 15px; border-bottom: 1px solid #ccc; padding-bottom: 10px;">
         <strong>#${index + 1} ${folio} - ${t.titulo}</strong> (${t.estado})<br>
-        <small>De: ${t.creador?.nombre || 'Mesa'} | Para: ${t.asignado?.nombre || 'Sin asignar'} | Fecha: ${parsearFecha(t.fecha_recibido)?.toLocaleString()}</small>
+        <small>De: ${t.creador?.nombre || 'Mesa'} | Para: ${t.asignado?.nombre || 'Sin asignar'} | SLA: ${infoSla.horasLimite}h | Tiempo: ${infoSla.textoTiempo}</small>
         <p style="margin: 5px 0;">${t.descripcion}</p>
       </div>
     `
@@ -471,7 +508,7 @@ const cerrarWorkspace = () => {
         </div>
       </header>
 
-      <!-- 📌 CONTENEDOR ANCHO COMPLETO PARA EL SCROLL (Pega la barra exactamente al borde derecho) -->
+      <!-- 📌 CONTENEDOR ANCHO COMPLETO PARA EL SCROLL -->
       <div class="flex-1 overflow-y-auto w-full">
         <main class="p-4 sm:p-8 space-y-6 sm:space-y-8 w-full max-w-7xl mx-auto pb-24">
           
@@ -499,6 +536,15 @@ const cerrarWorkspace = () => {
                       <label class="text-[9px] uppercase font-bold text-zinc-500 block">Para (Asignado)</label>
                       <p class="text-xs font-bold text-amber-500 mt-0.5 truncate">{{ ticketActivoWorkspace.asignado?.nombre || ticketActivoWorkspace.asignado?.email || 'Sin Asignar' }}</p>
                     </div>
+                  </div>
+
+                  <!-- ⏱️ MUESTRA DE TIEMPO / SLA DENTRO DEL MODAL -->
+                  <div class="p-3 rounded-xl border flex items-center justify-between" :class="obtenerResumenTiempoSla(ticketActivoWorkspace).badgeColor">
+                    <div>
+                      <span class="text-[9px] uppercase font-bold block opacity-70">Cronómetro SLA</span>
+                      <span class="text-xs font-black">Meta: {{ obtenerResumenTiempoSla(ticketActivoWorkspace).horasLimite }}h | Consumido: {{ obtenerResumenTiempoSla(ticketActivoWorkspace).textoTiempo }}</span>
+                    </div>
+                    <span class="text-sm font-black">{{ obtenerResumenTiempoSla(ticketActivoWorkspace).aTiempo ? '🟢 A Tiempo' : '🚨 Excedido' }}</span>
                   </div>
 
                   <div>
@@ -624,7 +670,9 @@ const cerrarWorkspace = () => {
                 <div v-if="hitosDelProyectoSeleccionado.length > 0 && !usarHitoManual" class="flex-1 flex gap-2 items-center">
                   <select v-model="asuntoTicket" required :class="esModoOscuro ? 'bg-zinc-950 border-zinc-800 text-white' : 'bg-slate-100 border-slate-300 text-slate-800'" class="flex-1 text-xs p-2.5 rounded-xl border focus:outline-none font-bold cursor-pointer">
                     <option value="" disabled>-- Selecciona un hito del proyecto --</option>
-                    <option v-for="hito in hitosDelProyectoSeleccionado" :key="hito.id" :value="hito.title">{{ hito.title }}</option>
+                    <option v-for="hito in hitosDelProyectoSeleccionado" :key="hito.id" :value="hito.title">
+                      {{ hito.completed ? '✅ [Completado]' : '⏳ [Pendiente]' }} {{ hito.title }}
+                    </option>
                   </select>
                   <button type="button" @click="usarHitoManual = true" class="text-[11px] font-bold text-red-500 underline whitespace-nowrap">✏️ Otro</button>
                 </div>
@@ -657,7 +705,7 @@ const cerrarWorkspace = () => {
             <input v-model="busquedaQuery" type="text" placeholder="Buscar folio o texto..." :class="esModoOscuro ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-slate-100 border-slate-300 text-slate-800'" class="px-4 py-2 text-xs rounded-xl focus:outline-none w-full lg:w-64 border" />
           </div>
 
-          <!-- LISTADO DE TICKETS -->
+          <!-- LISTADO DE TICKETS CON BADGE DE CRONÓMETRO / SLA CADA UNO -->
           <div class="space-y-4 sm:space-y-6">
             <div v-if="loading" class="text-center py-12 text-zinc-400 animate-pulse text-sm">Sincronizando registros...</div>
             <div v-else-if="ticketsFiltradosConPrivacidad.length === 0" :class="esModoOscuro ? 'bg-zinc-900 border-zinc-800 text-zinc-400' : 'bg-white border-slate-200 text-slate-500'" class="text-center py-16 rounded-2xl text-sm border">No tienes requerimientos en esta sección.</div>
@@ -678,6 +726,16 @@ const cerrarWorkspace = () => {
                     <option value="ALTA">🟡 ALTA</option>
                     <option value="CRITICA">🔴 CRÍTICA</option>
                   </select>
+
+                  <!-- ⏱️ CRONÓMETRO VISIBLE DE SLA POR TICKET -->
+                  <span 
+                    :class="obtenerResumenTiempoSla(ticket).badgeColor" 
+                    class="px-2 py-0.5 rounded-md text-[10px] font-bold border flex items-center gap-1"
+                    :title="'Horas limite asignadas: ' + obtenerResumenTiempoSla(ticket).horasLimite + 'h'"
+                  >
+                    ⏱️ SLA {{ obtenerResumenTiempoSla(ticket).horasLimite }}h | Consumido: {{ obtenerResumenTiempoSla(ticket).textoTiempo }}
+                    <span>{{ obtenerResumenTiempoSla(ticket).aTiempo ? '🟢' : '🚨 Excedido' }}</span>
+                  </span>
 
                   <span v-if="ticket.proyecto" class="bg-blue-500/10 border border-blue-500/30 text-blue-500 px-2 py-0.5 rounded-md text-[10px] font-bold">📁 {{ ticket.proyecto }}</span>
                   <span v-if="ticket.devoluciones > 0" class="bg-red-500/10 border border-red-500/30 text-red-500 px-2 py-0.5 rounded-md text-[10px] font-bold">⚠️ {{ ticket.devoluciones }} Devolución(es)</span>
