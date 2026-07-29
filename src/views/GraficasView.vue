@@ -39,6 +39,7 @@ const OBTENER_METRICAS_DETALLADAS = gql`
       prioridad
       proyecto
       fecha_recibido
+      fecha_trabajando
       fecha_completado
       fecha_evaluacion
       horasEstimadas
@@ -63,19 +64,19 @@ const eficienciaCalidad = computed(() => {
   return Math.max(0, Math.round(100 - penalizacion))
 })
 
-// Eficiencia de Tiempos (SLA)
+// ⏱️ EFICIENCIA SLA BASADA ÚNICAMENTE EN EL TIEMPO DE ATENCIÓN REAL (DESDE fecha_trabajando)
 const eficienciaSlaTiempos = computed(() => {
-  const concluidosList = tickets.value.filter((t: any) => t.fecha_completado)
+  const concluidosList = tickets.value.filter((t: any) => t.fecha_completado || t.fecha_evaluacion)
   if (!concluidosList.length) return 100
 
   let aTiempoCount = 0
   concluidosList.forEach((t: any) => {
-    const inicio = new Date(t.fecha_recibido).getTime()
-    const fin = new Date(t.fecha_completado).getTime()
-    const horasUsadas = (fin - inicio) / (1000 * 60 * 60)
+    const inicioReal = t.fecha_trabajando ? new Date(t.fecha_trabajando).getTime() : new Date(t.fecha_recibido).getTime()
+    const fin = new Date(t.fecha_completado || t.fecha_evaluacion).getTime()
+    const horasAtencionReal = Math.max(0, fin - inicioReal) / (1000 * 60 * 60)
     const horasLimite = t.horasEstimadas || 10
 
-    if (horasUsadas <= horasLimite) {
+    if (horasAtencionReal <= horasLimite) {
       aTiempoCount++
     }
   })
@@ -112,8 +113,10 @@ const datosGrafica7Dias = computed(() => {
       const fechaT = new Date(isNaN(Number(t.fecha_recibido)) ? t.fecha_recibido : Number(t.fecha_recibido))
       const diffDias = Math.floor((hoy.getTime() - fechaT.getTime()) / (1000 * 3600 * 24))
       if (diffDias >= 0 && diffDias < 7) {
-        const index = 6 - diffDias
-        ingresadosPorDia[index] = (ingresadosPorDia[index] ?? 0) + 1
+        const idx = 6 - diffDias
+        if (ingresadosPorDia[idx] !== undefined) {
+          ingresadosPorDia[idx]!++
+        }
       }
     }
 
@@ -122,8 +125,10 @@ const datosGrafica7Dias = computed(() => {
       const fechaFin = new Date(isNaN(Number(fechaFinStr)) ? fechaFinStr : Number(fechaFinStr))
       const diffDiasFin = Math.floor((hoy.getTime() - fechaFin.getTime()) / (1000 * 3600 * 24))
       if (diffDiasFin >= 0 && diffDiasFin < 7) {
-        const idx = 6 - diffDiasFin
-        resueltosPorDia[idx] = (resueltosPorDia[idx] ?? 0) + 1
+        const idxFin = 6 - diffDiasFin
+        if (resueltosPorDia[idxFin] !== undefined) {
+          resueltosPorDia[idxFin]!++
+        }
       }
     }
   })
@@ -144,7 +149,6 @@ const renderizarGraficasDashboard = async () => {
   const colorTexto = esModoOscuro.value ? '#a1a1aa' : '#475569'
   const colorGrid = esModoOscuro.value ? '#27272a' : '#e2e8f0'
 
-  // BAR CHART: PRIORIDAD
   if (barChartRef.value) {
     barChart = new Chart(barChartRef.value, {
       type: 'bar',
@@ -168,7 +172,6 @@ const renderizarGraficasDashboard = async () => {
     })
   }
 
-  // DUAL LINE CHART: DÍAS REALES DE LA ÚLTIMA SEMANA
   if (lineChartRef.value) {
     lineChart = new Chart(lineChartRef.value, {
       type: 'line',
@@ -209,7 +212,6 @@ const renderizarGraficasDashboard = async () => {
     })
   }
 
-  // GAUGE CALIDAD
   if (gaugeCalidadRef.value) {
     gaugeCalidad = new Chart(gaugeCalidadRef.value, {
       type: 'doughnut',
@@ -231,7 +233,6 @@ const renderizarGraficasDashboard = async () => {
     })
   }
 
-  // GAUGE SLA
   if (gaugeSlaRef.value) {
     gaugeSla = new Chart(gaugeSlaRef.value, {
       type: 'doughnut',
@@ -253,7 +254,6 @@ const renderizarGraficasDashboard = async () => {
     })
   }
 
-  // SPARKINES
   if (spark1Ref.value) {
     spark1Chart = new Chart(spark1Ref.value, {
       type: 'line',
@@ -283,19 +283,17 @@ onMounted(() => {
 <template>
   <div :class="esModoOscuro ? 'bg-zinc-950 text-zinc-100' : 'bg-slate-50 text-slate-800'" class="flex h-screen overflow-hidden font-sans transition-colors duration-200">
     
-    <!-- Sidebar Fija -->
     <Sidebar :dark="esModoOscuro" />
 
     <div class="flex-1 flex flex-col min-w-0 h-screen overflow-hidden relative">
       
-      <!-- HEADER CON TARJETA DE PERFIL (TOP-RIGHT) -->
+      <!-- HEADER CON PERFIL (TOP-RIGHT) -->
       <header :class="esModoOscuro ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-slate-200'" class="h-16 border-b px-4 sm:px-8 flex justify-between items-center shrink-0">
         <div class="flex items-center space-x-2 sm:space-x-3 min-w-0">
           <span class="text-[10px] sm:text-xs font-black bg-red-700 text-white px-2 py-0.5 rounded-md tracking-wider">RELANT HQ</span>
           <h2 class="text-sm sm:text-lg font-black tracking-tight truncate">Indicadores de Eficiencia</h2>
         </div>
 
-        <!-- 👤 TARJETA DE PERFIL INTEGRADA -->
         <div 
           @click="router.push('/perfil')" 
           :class="esModoOscuro ? 'bg-zinc-900 hover:bg-zinc-800 border-zinc-800/80 text-white' : 'bg-white hover:bg-slate-100 border-slate-200 text-slate-800'"
@@ -320,7 +318,6 @@ onMounted(() => {
         </div>
       </header>
 
-      <!-- 📌 CONTENEDOR CON SCROLL AL BORDE DERECHO -->
       <div class="flex-1 overflow-y-auto w-full">
         <main class="p-4 sm:p-8 space-y-6 max-w-7xl mx-auto w-full pb-24">
           
@@ -341,7 +338,6 @@ onMounted(() => {
                 </div>
               </div>
 
-              <!-- 📅 GRÁFICA REAL DE ÚLTIMOS 7 DÍAS -->
               <div :class="esModoOscuro ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-slate-200 shadow-sm'" class="p-5 sm:p-6 rounded-2xl border flex flex-col">
                 <h3 class="text-xs font-black uppercase tracking-wider text-zinc-400 mb-4">
                   Últimos 7 Días: Ingresados vs Resueltos
@@ -369,7 +365,7 @@ onMounted(() => {
 
               <div :class="esModoOscuro ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-slate-200 shadow-sm'" class="p-5 rounded-2xl border flex flex-col justify-between">
                 <h4 class="text-[10px] font-black uppercase tracking-wider text-blue-500">
-                  ⏱️ Eficiencia de Tiempo (SLA)
+                  ⏱️ Eficiencia SLA (Atención Real)
                 </h4>
                 <div class="relative h-28 w-full flex items-center justify-center mt-2">
                   <canvas ref="gaugeSlaRef"></canvas>

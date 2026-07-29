@@ -97,8 +97,8 @@ const bitacoraProgresoAcumulada = computed(() => {
   return ticket.chat ? ticket.chat.split('\n') : [`[⚙️ Sistema] Esperando primer mensaje de coordinación...`]
 })
 
+// 🎯 AUTOCOMPLETADO MULTI-USUARIO DESPUÉS DE LA COMA (,)
 const usuariosSugeridos = computed(() => {
-  // 1. Extraemos solo lo escrito después de la última coma
   const partes = correoDestinatario.value.split(',')
   const ultimoTexto = partes[partes.length - 1]?.trim().toLowerCase() || ''
 
@@ -113,10 +113,9 @@ const usuariosSugeridos = computed(() => {
 
 const seleccionarUsuarioSugerido = (usuario: Usuario) => {
   const partes = correoDestinatario.value.split(',')
-  partes.pop() // Eliminamos el fragmento que se estaba escribiendo
-  partes.push(' ' + usuario.email) // Añadimos el nuevo correo seleccionado
+  partes.pop()
+  partes.push(' ' + usuario.email)
   
-  // Recomponemos la cadena con comas
   correoDestinatario.value = partes.join(',').trimStart() + ', '
   mostrarSugerencias.value = false
 }
@@ -152,17 +151,38 @@ const obtenerColorPrioridad = (prioridad: string) => {
   }
 }
 
-// ⏱️ HELPER: CÁLCULO CIENTÍFICO Y VISUAL DEL TIEMPO / SLA CADA TICKET
+// ⏱️ DESGLOSE SEPARADO: TIEMPO DE ESPERA VS TIEMPO DE ATENCIÓN REAL (SLA)
 const obtenerResumenTiempoSla = (ticket: any) => {
-  if (!ticket || !ticket.fecha_recibido) return { texto: 'Sin registro', aTiempo: true, badgeColor: 'bg-zinc-800 text-zinc-400' }
+  if (!ticket || !ticket.fecha_recibido) return { textoTiempo: 'Sin registro', tiempoEsperaTexto: '0m', aTiempo: true, badgeColor: 'bg-zinc-800 text-zinc-400' }
 
-  const inicio = parsearFecha(ticket.fecha_recibido)?.getTime() || Date.now()
-  const fin = ticket.fecha_completado || ticket.fecha_evaluacion
+  const fechaRecibido = parsearFecha(ticket.fecha_recibido)?.getTime() || Date.now()
+  const fechaTrabajando = ticket.fecha_trabajando ? parsearFecha(ticket.fecha_trabajando)?.getTime() : null
+  const fechaFin = ticket.fecha_completado || ticket.fecha_evaluacion
     ? (parsearFecha(ticket.fecha_completado || ticket.fecha_evaluacion)?.getTime() || Date.now())
     : Date.now()
 
-  const msTranscurridos = Math.max(0, fin - inicio)
-  const horasUsadas = msTranscurridos / (1000 * 60 * 60)
+  // 1. TIEMPO QUE DURÓ ESPERANDO ATENCIÓN (Desde recibido hasta que se procesa)
+  const msEspera = (fechaTrabajando ? fechaTrabajando : (ticket.estado === 'RECIBIDO' ? Date.now() : fechaFin)) - fechaRecibido
+  const minsEsperaTotal = Math.floor(Math.max(0, msEspera) / (1000 * 60))
+  const horasEspera = Math.floor(minsEsperaTotal / 60)
+  const minsEsperaResto = minsEsperaTotal % 60
+  const tiempoEsperaTexto = horasEspera > 0 ? `${horasEspera}h ${minsEsperaResto}m` : `${minsEsperaResto}m`
+
+  // 2. TIEMPO DE ATENCIÓN REAL (Empieza ÚNICAMENTE al abrir/procesar el ticket)
+  if (!fechaTrabajando && ticket.estado === 'RECIBIDO') {
+    return {
+      horasUsadas: '0.0',
+      horasLimite: ticket.horasEstimadas || 10,
+      textoTiempo: 'Sin iniciar',
+      tiempoEsperaTexto,
+      aTiempo: true,
+      badgeColor: esModoOscuro.value ? 'bg-amber-950/60 border-amber-800/80 text-amber-400' : 'bg-amber-50 border-amber-300 text-amber-700'
+    }
+  }
+
+  const inicioAtencion = fechaTrabajando || fechaRecibido
+  const msAtencion = Math.max(0, fechaFin - inicioAtencion)
+  const horasUsadas = msAtencion / (1000 * 60 * 60)
   const horasLimite = ticket.horasEstimadas || 10
 
   const horasEnteras = Math.floor(horasUsadas)
@@ -180,6 +200,7 @@ const obtenerResumenTiempoSla = (ticket: any) => {
     horasUsadas: horasUsadas.toFixed(1),
     horasLimite,
     textoTiempo,
+    tiempoEsperaTexto,
     aTiempo,
     badgeColor: aTiempo 
       ? (esModoOscuro.value ? 'bg-emerald-950/60 border-emerald-800/80 text-emerald-400' : 'bg-emerald-50 border-emerald-300 text-emerald-700')
@@ -289,7 +310,7 @@ const descargarReporteExcel = () => {
       <table>
         <thead>
           <tr>
-            <th>Folio</th><th>Título</th><th>Descripción</th><th>Prioridad</th><th>Proyecto</th><th>Horas SLA</th><th>Tiempo Consumido</th><th>Estado</th><th>Fecha Recibido</th><th>Creador</th><th>Asignado</th>
+            <th>Folio</th><th>Título</th><th>Descripción</th><th>Prioridad</th><th>Proyecto</th><th>Espera Previa</th><th>Atención Real</th><th>Meta SLA</th><th>Estado</th><th>Fecha Recibido</th><th>Creador</th><th>Asignado</th>
           </tr>
         </thead>
         <tbody>
@@ -300,7 +321,7 @@ const descargarReporteExcel = () => {
     const infoSla = obtenerResumenTiempoSla(t)
     tablaHtml += `
       <tr>
-        <td>${folio}</td><td>${t.titulo || ''}</td><td>${t.descripcion || ''}</td><td>${t.prioridad || 'BAJA'}</td><td>${t.proyecto || 'General'}</td><td>${infoSla.horasLimite}h</td><td>${infoSla.textoTiempo}</td><td>${t.estado || ''}</td><td>${parsearFecha(t.fecha_recibido)?.toLocaleString() || ''}</td><td>${t.creador?.nombre || t.creador?.email || ''}</td><td>${t.asignado?.nombre || t.asignado?.email || ''}</td>
+        <td>${folio}</td><td>${t.titulo || ''}</td><td>${t.descripcion || ''}</td><td>${t.prioridad || 'BAJA'}</td><td>${t.proyecto || 'General'}</td><td>${infoSla.tiempoEsperaTexto}</td><td>${infoSla.textoTiempo}</td><td>${infoSla.horasLimite}h</td><td>${t.estado || ''}</td><td>${parsearFecha(t.fecha_recibido)?.toLocaleString() || ''}</td><td>${t.creador?.nombre || t.creador?.email || ''}</td><td>${t.asignado?.nombre || t.asignado?.email || ''}</td>
       </tr>
     `
   })
@@ -334,7 +355,7 @@ const descargarReportePdf = () => {
     itemsHtml += `
       <div style="margin-bottom: 15px; border-bottom: 1px solid #ccc; padding-bottom: 10px;">
         <strong>#${index + 1} ${folio} - ${t.titulo}</strong> (${t.estado})<br>
-        <small>De: ${t.creador?.nombre || 'Mesa'} | Para: ${t.asignado?.nombre || 'Sin asignar'} | SLA: ${infoSla.horasLimite}h | Tiempo: ${infoSla.textoTiempo}</small>
+        <small>De: ${t.creador?.nombre || 'Mesa'} | Para: ${t.asignado?.nombre || 'Sin asignar'} | Espera: ${infoSla.tiempoEsperaTexto} | Atención Real: ${infoSla.textoTiempo} (SLA: ${infoSla.horasLimite}h)</small>
         <p style="margin: 5px 0;">${t.descripcion}</p>
       </div>
     `
@@ -479,7 +500,7 @@ const cerrarWorkspace = () => {
 
     <div class="flex-1 flex flex-col min-w-0 h-screen overflow-hidden relative">
       
-      <!-- HEADER FIX -->
+      <!-- HEADER -->
       <header :class="esModoOscuro ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-slate-200'" class="h-16 border-b px-4 sm:px-8 flex justify-between items-center shrink-0">
         <div class="flex items-center space-x-2 sm:space-x-3 min-w-0">
           <span class="text-[10px] sm:text-xs font-black bg-red-700 text-white px-2 py-0.5 rounded-md tracking-wider">RELANT HQ</span>
@@ -511,7 +532,7 @@ const cerrarWorkspace = () => {
         </div>
       </header>
 
-      <!-- 📌 CONTENEDOR ANCHO COMPLETO PARA EL SCROLL -->
+      <!-- 📌 CONTENEDOR CON SCROLL AL BORDE DERECHO -->
       <div class="flex-1 overflow-y-auto w-full">
         <main class="p-4 sm:p-8 space-y-6 sm:space-y-8 w-full max-w-7xl mx-auto pb-24">
           
@@ -541,13 +562,16 @@ const cerrarWorkspace = () => {
                     </div>
                   </div>
 
-                  <!-- ⏱️ MUESTRA DE TIEMPO / SLA DENTRO DEL MODAL -->
-                  <div class="p-3 rounded-xl border flex items-center justify-between" :class="obtenerResumenTiempoSla(ticketActivoWorkspace).badgeColor">
-                    <div>
-                      <span class="text-[9px] uppercase font-bold block opacity-70">Cronómetro SLA</span>
-                      <span class="text-xs font-black">Meta: {{ obtenerResumenTiempoSla(ticketActivoWorkspace).horasLimite }}h | Consumido: {{ obtenerResumenTiempoSla(ticketActivoWorkspace).textoTiempo }}</span>
+                  <!-- ⏱️ MUESTRA SEPARADA DE ESPERA PREVIA VS ATENCIÓN REAL -->
+                  <div class="p-3 rounded-xl border flex flex-col gap-1.5" :class="obtenerResumenTiempoSla(ticketActivoWorkspace).badgeColor">
+                    <div class="flex justify-between items-center text-xs">
+                      <span class="font-bold">⌛ Espera previa de atención:</span>
+                      <span class="font-mono font-black">{{ obtenerResumenTiempoSla(ticketActivoWorkspace).tiempoEsperaTexto }}</span>
                     </div>
-                    <span class="text-sm font-black">{{ obtenerResumenTiempoSla(ticketActivoWorkspace).aTiempo ? '🟢 A Tiempo' : '🚨 Excedido' }}</span>
+                    <div class="flex justify-between items-center text-xs border-t pt-1" :class="esModoOscuro ? 'border-zinc-800' : 'border-slate-200'">
+                      <span class="font-bold">⏱️ Tiempo de atención real (SLA {{ obtenerResumenTiempoSla(ticketActivoWorkspace).horasLimite }}h):</span>
+                      <span class="font-mono font-black">{{ obtenerResumenTiempoSla(ticketActivoWorkspace).textoTiempo }}</span>
+                    </div>
                   </div>
 
                   <div>
@@ -708,7 +732,7 @@ const cerrarWorkspace = () => {
             <input v-model="busquedaQuery" type="text" placeholder="Buscar folio o texto..." :class="esModoOscuro ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-slate-100 border-slate-300 text-slate-800'" class="px-4 py-2 text-xs rounded-xl focus:outline-none w-full lg:w-64 border" />
           </div>
 
-          <!-- LISTADO DE TICKETS CON BADGE DE CRONÓMETRO / SLA CADA UNO -->
+          <!-- LISTADO DE TICKETS CON MUESTRA SEPARADA DE TIEMPOS -->
           <div class="space-y-4 sm:space-y-6">
             <div v-if="loading" class="text-center py-12 text-zinc-400 animate-pulse text-sm">Sincronizando registros...</div>
             <div v-else-if="ticketsFiltradosConPrivacidad.length === 0" :class="esModoOscuro ? 'bg-zinc-900 border-zinc-800 text-zinc-400' : 'bg-white border-slate-200 text-slate-500'" class="text-center py-16 rounded-2xl text-sm border">No tienes requerimientos en esta sección.</div>
@@ -730,13 +754,18 @@ const cerrarWorkspace = () => {
                     <option value="CRITICA">🔴 CRÍTICA</option>
                   </select>
 
-                  <!-- ⏱️ CRONÓMETRO VISIBLE DE SLA POR TICKET -->
+                  <!-- ⌛ TIEMPO DE ESPERA PREVIA -->
+                  <span class="bg-zinc-950 border border-zinc-800 text-zinc-400 px-2 py-0.5 rounded-md text-[10px] font-bold" title="Tiempo que duró el ticket esperando a ser procesado">
+                    ⌛ Espera: {{ obtenerResumenTiempoSla(ticket).tiempoEsperaTexto }}
+                  </span>
+
+                  <!-- ⏱️ TIEMPO DE ATENCIÓN REAL (SLA) -->
                   <span 
                     :class="obtenerResumenTiempoSla(ticket).badgeColor" 
                     class="px-2 py-0.5 rounded-md text-[10px] font-bold border flex items-center gap-1"
-                    :title="'Horas limite asignadas: ' + obtenerResumenTiempoSla(ticket).horasLimite + 'h'"
+                    :title="'Horas límite asignadas: ' + obtenerResumenTiempoSla(ticket).horasLimite + 'h'"
                   >
-                    ⏱️ SLA {{ obtenerResumenTiempoSla(ticket).horasLimite }}h | Consumido: {{ obtenerResumenTiempoSla(ticket).textoTiempo }}
+                    ⏱️ Atención SLA ({{ obtenerResumenTiempoSla(ticket).horasLimite }}h): {{ obtenerResumenTiempoSla(ticket).textoTiempo }}
                     <span>{{ obtenerResumenTiempoSla(ticket).aTiempo ? '🟢' : '🚨 Excedido' }}</span>
                   </span>
 
@@ -765,7 +794,7 @@ const cerrarWorkspace = () => {
         </main>
       </div>
 
-      <!-- ☀️/🌙 BOTÓN FLOTANTE (BOTTOM-RIGHT) -->
+      <!-- ☀️/🌙 BOTÓN FLOTANTE -->
       <button 
         @click="toggleTema" 
         :class="esModoOscuro ? 'bg-zinc-900 border-zinc-700 text-white hover:bg-zinc-800' : 'bg-white border-slate-300 text-slate-800 hover:bg-slate-100'"
