@@ -208,7 +208,6 @@ const obtenerResumenTiempoSla = (ticket: any) => {
   }
 }
 
-// 📎 MANEJO ÚNICO DE ADJUNTOS VÍA CLIP
 const manejarSubidaArchivosMultiples = (event: Event) => {
   const target = event.target as HTMLInputElement
   const files = target.files
@@ -451,6 +450,7 @@ const manejarEnviarTicket = async () => {
   } catch (err: any) { alert('Error: ' + err.message) }
 }
 
+// 🎯 BÚSQUEDA EXCLUSIVAMENTE POR TÍTULO / ASUNTO
 const ticketsFiltradosConPrivacidad = computed(() => {
   const tickets = result.value?.misTickets || []
   const miIdPrisma = result.value?.me?.id || ''
@@ -479,9 +479,7 @@ const ticketsFiltradosConPrivacidad = computed(() => {
   if (busquedaQuery.value) {
     const query = busquedaQuery.value.toLowerCase()
     filtrados = filtrados.filter((t: any) => 
-      t.titulo?.toLowerCase().includes(query) ||
-      t.descripcion?.toLowerCase().includes(query) ||
-      t.id?.toLowerCase().includes(query)
+      t.titulo?.toLowerCase().includes(query)
     )
   }
 
@@ -553,7 +551,7 @@ const cerrarWorkspace = () => {
 
     <div class="flex-1 flex flex-col min-w-0 h-screen overflow-hidden relative">
       
-      <!-- HEADER -->
+      <!-- HEADER CON NOMBRE "Tickets" -->
       <header :class="esModoOscuro ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-slate-200'" class="h-16 border-b px-4 sm:px-8 flex justify-between items-center shrink-0">
         <div class="flex items-center space-x-2 sm:space-x-3 min-w-0">
           <span class="text-[10px] sm:text-xs font-black bg-red-700 text-white px-2 py-0.5 rounded-md tracking-wider">RELANT HQ</span>
@@ -587,7 +585,7 @@ const cerrarWorkspace = () => {
       <div class="flex-1 overflow-y-auto w-full">
         <main class="p-4 sm:p-8 space-y-6 sm:space-y-8 w-full max-w-7xl mx-auto pb-24">
           
-          <!-- MODAL DE CONFIRMACIÓN DE ELIMINACIÓN -->
+          <!-- 🎯 VENTANA FLOTANTE CENTRADA PARA BORRAR TICKET -->
           <div v-if="mostrarModalEliminar" class="fixed inset-0 bg-zinc-950/80 backdrop-blur-md z-[100] flex items-center justify-center p-4">
             <div :class="esModoOscuro ? 'bg-zinc-900 border-zinc-800 text-white' : 'bg-white border-slate-200 text-slate-800'" class="border rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl text-center space-y-6">
               <div class="w-16 h-16 bg-red-500/10 border border-red-500/30 rounded-2xl flex items-center justify-center mx-auto text-3xl">
@@ -721,7 +719,7 @@ const cerrarWorkspace = () => {
             </div>
           </div>
 
-          <!-- FORMULARIO DE TICKET CON SOLO EL CLIP DE ADJUNTOS -->
+          <!-- FORMULARIO DE TICKET (SOLO CON BOTÓN DE CLIP) -->
           <div :class="esModoOscuro ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-slate-200 shadow-sm'" class="w-full rounded-2xl border overflow-hidden text-left">
             <div class="bg-red-700 p-3 sm:p-4 text-white">
               <h3 class="text-xs font-black tracking-wider uppercase">Generar Requerimiento Dirigido</h3>
@@ -781,7 +779,7 @@ const cerrarWorkspace = () => {
                 </div>
               </div>
 
-              <!-- 📎 SOLO EL CLIP DE ADJUNTOS -->
+              <!-- 📎 SOLO BOTÓN DE CLIP PARA ADJUNTAR ARCHIVOS -->
               <div class="flex items-center gap-2 border-b pb-3" :class="esModoOscuro ? 'border-zinc-800' : 'border-slate-200'">
                 <input type="file" ref="fileInputRef" multiple accept="*" @change="manejarSubidaArchivosMultiples" class="hidden" />
                 <button type="button" @click="abrirSelectorArchivos" class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-bold transition cursor-pointer">
@@ -793,7 +791,6 @@ const cerrarWorkspace = () => {
                 </span>
               </div>
 
-              <!-- ARCHIVOS ADJUNTOS CARGADOS -->
               <div v-if="listaArchivosBase64.length > 0" class="flex flex-wrap gap-2 pt-1">
                 <span v-for="(f, i) in listaArchivosBase64" :key="i" class="bg-zinc-800 text-zinc-200 text-[10px] font-mono px-2.5 py-1 rounded-lg border border-zinc-700 flex items-center gap-1.5">
                   📦 {{ f.nombre }}
@@ -809,7 +806,7 @@ const cerrarWorkspace = () => {
             </form>
           </div>
 
-          <!-- 📂 FILTROS -->
+          <!-- 📂 FILTROS Y BÚSQUEDA EXCLUSIVA POR TÍTULO -->
           <div :class="esModoOscuro ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-slate-200 shadow-sm'" class="flex flex-col lg:flex-row lg:items-center justify-between gap-4 p-3 sm:p-4 rounded-2xl border">
             <div class="flex items-center space-x-1 overflow-x-auto pb-2 lg:pb-0">
               <button v-for="opcion in [
@@ -822,7 +819,8 @@ const cerrarWorkspace = () => {
               </button>
             </div>
 
-            <input v-model="busquedaQuery" type="text" placeholder="Buscar folio o texto..." :class="esModoOscuro ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-slate-100 border-slate-300 text-slate-800'" class="px-4 py-2 text-xs rounded-xl focus:outline-none w-full lg:w-64 border" />
+            <!-- 🎯 CAMBIO DE BÚSQUEDA EXCLUSIVAMENTE POR TÍTULO / ASUNTO -->
+            <input v-model="busquedaQuery" type="text" placeholder="Buscar por Título / Asunto..." :class="esModoOscuro ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-slate-100 border-slate-300 text-slate-800'" class="px-4 py-2 text-xs rounded-xl focus:outline-none w-full lg:w-64 border" />
           </div>
 
           <!-- LISTADO DE TICKETS -->
@@ -863,7 +861,7 @@ const cerrarWorkspace = () => {
                   <span v-if="ticket.devoluciones > 0" class="bg-red-500/10 border border-red-500/30 text-red-500 px-2 py-0.5 rounded-md text-[10px] font-bold">⚠️ {{ ticket.devoluciones }} Devolución(es)</span>
                 </div>
 
-                <!-- BOTÓN DE ELIMINACIÓN DE TICKET -->
+                <!-- 🎯 BOTÓN '✕' PARA DESPLEGAR MODAL DE ELIMINACIÓN -->
                 <button 
                   @click.stop="abrirModalEliminar(ticket)" 
                   class="absolute top-4 right-4 sm:static text-orange-500 hover:text-red-500 hover:bg-red-500/10 font-black text-xl w-8 h-8 rounded-xl flex items-center justify-center transition cursor-pointer"

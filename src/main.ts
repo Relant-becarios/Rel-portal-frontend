@@ -9,13 +9,13 @@ import { DefaultApolloClient } from '@vue/apollo-composable'
 import { auth } from './firebase.ts'
 import router from './router'
 
-// 🧠 Detecta si estás en Vercel (HTTPS) o en red local / IIS (HTTP) para evitar el error de Mixed Content
-const backendUrl = window.location.protocol === 'https:'
-  ? 'https://rel-portal-backend.onrender.com' // 👈 Pon aquí tu URL HTTPS de Render si usas Vercel
+// 🧠 Detecta automáticamente la URL del Backend (Vercel/HTTPS vs Red Local/HTTP)
+const backendUri = window.location.protocol === 'https:'
+  ? 'https://rel-portal-backend.onrender.com'
   : 'http://26.199.22.6:4000'
 
 const httpLink = createHttpLink({
-  uri: backendUrl,
+  uri: backendUri,
 })
 
 const authLink = setContext(async (_, { headers }) => {

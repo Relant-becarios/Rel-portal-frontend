@@ -220,7 +220,7 @@ const manejarEnviarTicket = async () => {
               <input v-model="asuntoTicket" type="text" required class="w-full text-sm font-bold focus:outline-none bg-transparent text-white" placeholder="Título del hito o incidencia a resolver..." />
             </div>
 
-            <!-- 📎 SOLO EL CLIP DE ADJUNTOS -->
+            <!-- 📎 BOTÓN DE ADJUNTAR ARCHIVOS -->
             <div class="flex items-center gap-2 border-b pb-3 border-zinc-800">
               <input type="file" ref="fileInputRef" multiple accept="*" @change="manejarSubidaArchivosMultiples" class="hidden" />
               <button type="button" @click="abrirSelectorArchivos" class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-bold transition cursor-pointer">
