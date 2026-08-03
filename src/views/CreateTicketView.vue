@@ -220,30 +220,22 @@ const manejarEnviarTicket = async () => {
               <input v-model="asuntoTicket" type="text" required class="w-full text-sm font-bold focus:outline-none bg-transparent text-white" placeholder="Título del hito o incidencia a resolver..." />
             </div>
 
-            <!-- BARRA DE HERRAMIENTAS Y ADJUNTOS -->
-            <div :class="esModoOscuro ? 'bg-zinc-950/60 border-zinc-800' : 'bg-slate-100/70 border-slate-200'" class="rounded-xl border p-2 flex flex-wrap items-center justify-between gap-2 shadow-xs">
+            <!-- 📎 SOLO EL CLIP DE ADJUNTOS -->
+            <div class="flex items-center gap-2 border-b pb-3 border-zinc-800">
               <input type="file" ref="fileInputRef" multiple accept="*" @change="manejarSubidaArchivosMultiples" class="hidden" />
-
-              <div class="flex items-center gap-1 sm:gap-2 text-zinc-400">
-                <button type="button" class="p-1.5 hover:bg-zinc-800 hover:text-white rounded-lg transition text-xs font-black" title="Formato de texto">Aa</button>
-                <button type="button" class="p-1.5 hover:bg-zinc-800 hover:text-white rounded-lg transition text-xs" title="Asistente de IA / Edición">🪄</button>
-                <button type="button" @click="abrirSelectorArchivos" class="p-1.5 hover:bg-zinc-800 hover:text-white rounded-lg transition text-xs cursor-pointer" title="Adjuntar archivos">📎</button>
-                <button type="button" class="p-1.5 hover:bg-zinc-800 hover:text-white rounded-lg transition text-xs" title="Insertar enlace">🔗</button>
-                <button type="button" class="p-1.5 hover:bg-zinc-800 hover:text-white rounded-lg transition text-xs" title="Insertar emoji">😊</button>
-                <button type="button" @click="abrirSelectorArchivos" class="p-1.5 hover:bg-zinc-800 hover:text-white rounded-lg transition text-xs cursor-pointer" title="Google Drive / Almacenamiento">🔺</button>
-                <button type="button" @click="abrirSelectorArchivos" class="p-1.5 hover:bg-zinc-800 hover:text-white rounded-lg transition text-xs cursor-pointer" title="Insertar imagen">🖼️</button>
-                <button type="button" class="p-1.5 hover:bg-zinc-800 hover:text-white rounded-lg transition text-xs" title="Más opciones">⋮</button>
-              </div>
-
-              <button type="button" @click="descartarTodo" class="p-1.5 hover:bg-red-500/20 hover:text-red-400 rounded-lg transition text-xs font-bold text-zinc-500 cursor-pointer" title="Limpiar borrador">
-                🗑️
+              <button type="button" @click="abrirSelectorArchivos" class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-bold transition cursor-pointer">
+                <span>📎</span>
+                <span>Adjuntar archivos</span>
               </button>
+              <span v-if="listaArchivosBase64.length > 0" class="text-xs text-zinc-400 font-mono font-semibold">
+                ({{ listaArchivosBase64.length }} seleccionado(s))
+              </span>
             </div>
 
             <div v-if="listaArchivosBase64.length > 0" class="flex flex-wrap gap-2 pt-1">
               <span v-for="(f, i) in listaArchivosBase64" :key="i" class="bg-zinc-800 text-zinc-200 text-[10px] font-mono px-2.5 py-1 rounded-lg border border-zinc-700 flex items-center gap-1.5">
                 📦 {{ f.nombre }}
-                <button type="button" @click="listaArchivosBase64.splice(i, 1)" class="text-red-400 font-bold hover:text-red-300 ml-1">✕</button>
+                <button type="button" @click="listaArchivosBase64.splice(i, 1)" class="text-red-400 font-bold hover:text-red-300 ml-1 cursor-pointer">✕</button>
               </span>
             </div>
 

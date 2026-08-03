@@ -2,21 +2,22 @@ import { createApp, provide, h } from 'vue'
 import App from './App.vue'
 import './style.css'
 
-// Herramientas de GraphQL
 import { ApolloClient, createHttpLink, InMemoryCache } from '@apollo/client/core'
 import { setContext } from '@apollo/client/link/context'
 import { DefaultApolloClient } from '@vue/apollo-composable'
 
-// Conexión a Firebase y Router del Frontend
 import { auth } from './firebase.ts'
 import router from './router'
 
-// 1. Conexión base a tu servidor Node.js en IIS / Red Local
+// 🧠 Detecta si estás en Vercel (HTTPS) o en red local / IIS (HTTP) para evitar el error de Mixed Content
+const backendUrl = window.location.protocol === 'https:'
+  ? 'https://rel-portal-backend.onrender.com' // 👈 Pon aquí tu URL HTTPS de Render si usas Vercel
+  : 'http://26.199.22.6:4000'
+
 const httpLink = createHttpLink({
-  uri: 'http://26.199.22.6:4000', 
+  uri: backendUrl,
 })
 
-// 2. Middleware para inyectar el Token (JWT) de Firebase en los Headers de forma asíncrona
 const authLink = setContext(async (_, { headers }) => {
   if (auth.authStateReady) {
     await auth.authStateReady();
@@ -33,13 +34,11 @@ const authLink = setContext(async (_, { headers }) => {
   }
 })
 
-// 3. Inicializar el cliente Apollo uniendo el link de autenticación
 export const apolloClient = new ApolloClient({
   link: authLink.concat(httpLink),
   cache: new InMemoryCache(),
 })
 
-// 4. Configurar la instancia de la aplicación de Vue
 const app = createApp({
   setup () {
     provide(DefaultApolloClient, apolloClient)
@@ -47,6 +46,5 @@ const app = createApp({
   render: () => h(App),
 })
 
-// 5. Acoplar el sistema de enrutamiento y montar la aplicación en el DOM
 app.use(router)
 app.mount('#app')

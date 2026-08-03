@@ -208,6 +208,7 @@ const obtenerResumenTiempoSla = (ticket: any) => {
   }
 }
 
+// 📎 MANEJO ÚNICO DE ADJUNTOS VÍA CLIP
 const manejarSubidaArchivosMultiples = (event: Event) => {
   const target = event.target as HTMLInputElement
   const files = target.files
@@ -450,7 +451,6 @@ const manejarEnviarTicket = async () => {
   } catch (err: any) { alert('Error: ' + err.message) }
 }
 
-// 🎯 BÚSQUEDA EXCLUSIVAMENTE POR TÍTULO / ASUNTO
 const ticketsFiltradosConPrivacidad = computed(() => {
   const tickets = result.value?.misTickets || []
   const miIdPrisma = result.value?.me?.id || ''
@@ -479,7 +479,9 @@ const ticketsFiltradosConPrivacidad = computed(() => {
   if (busquedaQuery.value) {
     const query = busquedaQuery.value.toLowerCase()
     filtrados = filtrados.filter((t: any) => 
-      t.titulo?.toLowerCase().includes(query)
+      t.titulo?.toLowerCase().includes(query) ||
+      t.descripcion?.toLowerCase().includes(query) ||
+      t.id?.toLowerCase().includes(query)
     )
   }
 
@@ -551,7 +553,7 @@ const cerrarWorkspace = () => {
 
     <div class="flex-1 flex flex-col min-w-0 h-screen overflow-hidden relative">
       
-      <!-- HEADER RENOMBRADO A TICKETS -->
+      <!-- HEADER -->
       <header :class="esModoOscuro ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-slate-200'" class="h-16 border-b px-4 sm:px-8 flex justify-between items-center shrink-0">
         <div class="flex items-center space-x-2 sm:space-x-3 min-w-0">
           <span class="text-[10px] sm:text-xs font-black bg-red-700 text-white px-2 py-0.5 rounded-md tracking-wider">RELANT HQ</span>
@@ -647,7 +649,7 @@ const cerrarWorkspace = () => {
 
                   <div>
                     <label class="text-[10px] uppercase font-bold text-zinc-500 block">Descripción Inicial</label>
-                    <p :class="esModoOscuro ? 'bg-zinc-900/40 border-zinc-800/40 text-zinc-300' : 'bg-white border-slate-200 text-slate-700'" class="text-sm whitespace-pre-line mt-1 p-3 sm:p-4 rounded-xl border leading-relaxed max-h-40 overflow-y-auto">{{ ticketActivoWorkspace.descripcion }}</p>
+                    <p :class="esModoOscuro ? 'bg-zinc-950/40 border-zinc-800/40 text-zinc-300' : 'bg-white border-slate-200 text-slate-700'" class="text-sm whitespace-pre-line mt-1 p-3 sm:p-4 rounded-xl border leading-relaxed max-h-40 overflow-y-auto">{{ ticketActivoWorkspace.descripcion }}</p>
                   </div>
 
                   <div v-if="ticketActivoWorkspace.archivos && ticketActivoWorkspace.archivos.length > 0" class="pt-4 border-t" :class="esModoOscuro ? 'border-zinc-800' : 'border-slate-200'">
@@ -719,7 +721,7 @@ const cerrarWorkspace = () => {
             </div>
           </div>
 
-          <!-- FORMULARIO DE TICKET CON BARRA DE HERRAMIENTAS Y ADJUNTOS -->
+          <!-- FORMULARIO DE TICKET CON SOLO EL CLIP DE ADJUNTOS -->
           <div :class="esModoOscuro ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-slate-200 shadow-sm'" class="w-full rounded-2xl border overflow-hidden text-left">
             <div class="bg-red-700 p-3 sm:p-4 text-white">
               <h3 class="text-xs font-black tracking-wider uppercase">Generar Requerimiento Dirigido</h3>
@@ -779,31 +781,23 @@ const cerrarWorkspace = () => {
                 </div>
               </div>
 
-              <!-- BARRA DE HERRAMIENTAS TIPO GOOGLE MAIL / EDITOR DE TICKET -->
-              <div :class="esModoOscuro ? 'bg-zinc-950/60 border-zinc-800' : 'bg-slate-100/70 border-slate-200'" class="rounded-xl border p-2 flex flex-wrap items-center justify-between gap-2 shadow-xs">
+              <!-- 📎 SOLO EL CLIP DE ADJUNTOS -->
+              <div class="flex items-center gap-2 border-b pb-3" :class="esModoOscuro ? 'border-zinc-800' : 'border-slate-200'">
                 <input type="file" ref="fileInputRef" multiple accept="*" @change="manejarSubidaArchivosMultiples" class="hidden" />
-
-                <div class="flex items-center gap-1 sm:gap-2 text-zinc-400">
-                  <button type="button" class="p-1.5 hover:bg-zinc-800/80 hover:text-white rounded-lg transition text-xs font-black" title="Formato de texto">Aa</button>
-                  <button type="button" class="p-1.5 hover:bg-zinc-800/80 hover:text-white rounded-lg transition text-xs" title="Asistente de IA / Edición">🪄</button>
-                  <button type="button" @click="abrirSelectorArchivos" class="p-1.5 hover:bg-zinc-800/80 hover:text-white rounded-lg transition text-xs cursor-pointer" title="Adjuntar archivos">📎</button>
-                  <button type="button" class="p-1.5 hover:bg-zinc-800/80 hover:text-white rounded-lg transition text-xs" title="Insertar enlace">🔗</button>
-                  <button type="button" class="p-1.5 hover:bg-zinc-800/80 hover:text-white rounded-lg transition text-xs" title="Insertar emoji">😊</button>
-                  <button type="button" @click="abrirSelectorArchivos" class="p-1.5 hover:bg-zinc-800/80 hover:text-white rounded-lg transition text-xs cursor-pointer" title="Google Drive / Almacenamiento">🔺</button>
-                  <button type="button" @click="abrirSelectorArchivos" class="p-1.5 hover:bg-zinc-800/80 hover:text-white rounded-lg transition text-xs cursor-pointer" title="Insertar imagen">🖼️</button>
-                  <button type="button" class="p-1.5 hover:bg-zinc-800/80 hover:text-white rounded-lg transition text-xs" title="Más opciones">⋮</button>
-                </div>
-
-                <button type="button" @click="limpiarFormularioCompleto" class="p-1.5 hover:bg-red-500/20 hover:text-red-400 rounded-lg transition text-xs font-bold text-zinc-500 cursor-pointer" title="Limpiar borrador">
-                  🗑️
+                <button type="button" @click="abrirSelectorArchivos" class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-bold transition cursor-pointer">
+                  <span>📎</span>
+                  <span>Adjuntar archivos</span>
                 </button>
+                <span v-if="listaArchivosBase64.length > 0" class="text-xs text-zinc-400 font-mono font-semibold">
+                  ({{ listaArchivosBase64.length }} seleccionado(s))
+                </span>
               </div>
 
-              <!-- MOSTRAR ARCHIVOS ADJUNTOS -->
+              <!-- ARCHIVOS ADJUNTOS CARGADOS -->
               <div v-if="listaArchivosBase64.length > 0" class="flex flex-wrap gap-2 pt-1">
                 <span v-for="(f, i) in listaArchivosBase64" :key="i" class="bg-zinc-800 text-zinc-200 text-[10px] font-mono px-2.5 py-1 rounded-lg border border-zinc-700 flex items-center gap-1.5">
                   📦 {{ f.nombre }}
-                  <button type="button" @click="listaArchivosBase64.splice(i, 1)" class="text-red-400 font-bold hover:text-red-300 ml-1">✕</button>
+                  <button type="button" @click="listaArchivosBase64.splice(i, 1)" class="text-red-400 font-bold hover:text-red-300 ml-1 cursor-pointer">✕</button>
                 </span>
               </div>
 
@@ -828,8 +822,7 @@ const cerrarWorkspace = () => {
               </button>
             </div>
 
-            <!-- BUSCAR POR TÍTULO / ASUNTO -->
-            <input v-model="busquedaQuery" type="text" placeholder="Buscar por Título / Asunto..." :class="esModoOscuro ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-slate-100 border-slate-300 text-slate-800'" class="px-4 py-2 text-xs rounded-xl focus:outline-none w-full lg:w-64 border" />
+            <input v-model="busquedaQuery" type="text" placeholder="Buscar folio o texto..." :class="esModoOscuro ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-slate-100 border-slate-300 text-slate-800'" class="px-4 py-2 text-xs rounded-xl focus:outline-none w-full lg:w-64 border" />
           </div>
 
           <!-- LISTADO DE TICKETS -->
@@ -870,7 +863,7 @@ const cerrarWorkspace = () => {
                   <span v-if="ticket.devoluciones > 0" class="bg-red-500/10 border border-red-500/30 text-red-500 px-2 py-0.5 rounded-md text-[10px] font-bold">⚠️ {{ ticket.devoluciones }} Devolución(es)</span>
                 </div>
 
-                <!-- BOTÓN DE ELIMINACIÓN TIPO 'X' ROJO -->
+                <!-- BOTÓN DE ELIMINACIÓN DE TICKET -->
                 <button 
                   @click.stop="abrirModalEliminar(ticket)" 
                   class="absolute top-4 right-4 sm:static text-orange-500 hover:text-red-500 hover:bg-red-500/10 font-black text-xl w-8 h-8 rounded-xl flex items-center justify-center transition cursor-pointer"
