@@ -60,7 +60,6 @@ const OBTENER_TODOS_USUARIOS = gql`
 const { result: usuariosResult } = useQuery<{ todosUsuarios: Usuario[] }>(OBTENER_TODOS_USUARIOS)
 
 const usuariosSugeridos = computed(() => {
-  // 1. Extraemos solo lo escrito después de la última coma
   const partes = correoDestinatario.value.split(',')
   const ultimoTexto = partes[partes.length - 1]?.trim().toLowerCase() || ''
 
@@ -75,10 +74,9 @@ const usuariosSugeridos = computed(() => {
 
 const seleccionarUsuarioSugerido = (usuario: Usuario) => {
   const partes = correoDestinatario.value.split(',')
-  partes.pop() // Eliminamos el fragmento que se estaba escribiendo
-  partes.push(' ' + usuario.email) // Añadimos el nuevo correo seleccionado
+  partes.pop()
+  partes.push(' ' + usuario.email)
   
-  // Recomponemos la cadena con comas
   correoDestinatario.value = partes.join(',').trimStart() + ', '
   mostrarSugerencias.value = false
 }
@@ -87,13 +85,10 @@ const ocultarSugerenciasConRetraso = () => {
   setTimeout(() => { mostrarSugerencias.value = false }, 200)
 }
 
-// 📦 LÓGICA DE SUBIDA MÚLTIPLE DE CUALQUIER ARVO (.ZIP, .PDF, ETC.)
 const manejarSubidaArchivosMultiples = (event: Event) => {
   const target = event.target as HTMLInputElement
   const files = target.files
   if (!files || files.length === 0) return
-
-  listaArchivosBase64.value = []
 
   Array.from(files).forEach((file) => {
     if (file.size > 10 * 1024 * 1024) {
@@ -110,6 +105,21 @@ const manejarSubidaArchivosMultiples = (event: Event) => {
     }
     reader.readAsDataURL(file)
   })
+}
+
+const abrirSelectorArchivos = () => {
+  fileInputRef.value?.click()
+}
+
+const descartarTodo = () => {
+  asuntoTicket.value = ''
+  cuerpoTicket.value = ''
+  correoDestinatario.value = ''
+  proyectoTicket.value = ''
+  prioridadTicket.value = 'BAJA'
+  listaArchivosBase64.value = []
+  if (fileInputRef.value) fileInputRef.value.value = ''
+  router.push('/tickets')
 }
 
 const CREAR_TICKET_MUTATION = gql`
@@ -210,17 +220,31 @@ const manejarEnviarTicket = async () => {
               <input v-model="asuntoTicket" type="text" required class="w-full text-sm font-bold focus:outline-none bg-transparent text-white" placeholder="Título del hito o incidencia a resolver..." />
             </div>
 
-            <!-- 📎 SUBIDA DE MÚLTIPLES ARCHIVOS (.ZIP, .PDF, ETC.) -->
-            <div class="flex flex-col border-b pb-3 border-zinc-800">
-              <div class="flex items-center">
-                <label class="w-20 text-xs font-bold text-slate-400 uppercase tracking-wider">Adjuntos:</label>
-                <input type="file" ref="fileInputRef" multiple accept="*" @change="manejarSubidaArchivosMultiples" class="text-xs text-zinc-400 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-zinc-800 file:text-white cursor-pointer w-full" />
+            <!-- BARRA DE HERRAMIENTAS Y ADJUNTOS -->
+            <div :class="esModoOscuro ? 'bg-zinc-950/60 border-zinc-800' : 'bg-slate-100/70 border-slate-200'" class="rounded-xl border p-2 flex flex-wrap items-center justify-between gap-2 shadow-xs">
+              <input type="file" ref="fileInputRef" multiple accept="*" @change="manejarSubidaArchivosMultiples" class="hidden" />
+
+              <div class="flex items-center gap-1 sm:gap-2 text-zinc-400">
+                <button type="button" class="p-1.5 hover:bg-zinc-800 hover:text-white rounded-lg transition text-xs font-black" title="Formato de texto">Aa</button>
+                <button type="button" class="p-1.5 hover:bg-zinc-800 hover:text-white rounded-lg transition text-xs" title="Asistente de IA / Edición">🪄</button>
+                <button type="button" @click="abrirSelectorArchivos" class="p-1.5 hover:bg-zinc-800 hover:text-white rounded-lg transition text-xs cursor-pointer" title="Adjuntar archivos">📎</button>
+                <button type="button" class="p-1.5 hover:bg-zinc-800 hover:text-white rounded-lg transition text-xs" title="Insertar enlace">🔗</button>
+                <button type="button" class="p-1.5 hover:bg-zinc-800 hover:text-white rounded-lg transition text-xs" title="Insertar emoji">😊</button>
+                <button type="button" @click="abrirSelectorArchivos" class="p-1.5 hover:bg-zinc-800 hover:text-white rounded-lg transition text-xs cursor-pointer" title="Google Drive / Almacenamiento">🔺</button>
+                <button type="button" @click="abrirSelectorArchivos" class="p-1.5 hover:bg-zinc-800 hover:text-white rounded-lg transition text-xs cursor-pointer" title="Insertar imagen">🖼️</button>
+                <button type="button" class="p-1.5 hover:bg-zinc-800 hover:text-white rounded-lg transition text-xs" title="Más opciones">⋮</button>
               </div>
-              <div v-if="listaArchivosBase64.length > 0" class="flex flex-wrap gap-2 mt-2 pl-20">
-                <span v-for="(f, i) in listaArchivosBase64" :key="i" class="bg-zinc-800 text-zinc-300 text-[10px] font-mono px-2.5 py-1 rounded-lg border border-zinc-700 flex items-center gap-1">
-                  📦 {{ f.nombre }}
-                </span>
-              </div>
+
+              <button type="button" @click="descartarTodo" class="p-1.5 hover:bg-red-500/20 hover:text-red-400 rounded-lg transition text-xs font-bold text-zinc-500 cursor-pointer" title="Limpiar borrador">
+                🗑️
+              </button>
+            </div>
+
+            <div v-if="listaArchivosBase64.length > 0" class="flex flex-wrap gap-2 pt-1">
+              <span v-for="(f, i) in listaArchivosBase64" :key="i" class="bg-zinc-800 text-zinc-200 text-[10px] font-mono px-2.5 py-1 rounded-lg border border-zinc-700 flex items-center gap-1.5">
+                📦 {{ f.nombre }}
+                <button type="button" @click="listaArchivosBase64.splice(i, 1)" class="text-red-400 font-bold hover:text-red-300 ml-1">✕</button>
+              </span>
             </div>
 
             <div class="pt-2">
@@ -230,7 +254,7 @@ const manejarEnviarTicket = async () => {
             <div class="flex justify-between items-center pt-4 border-t border-zinc-800">
               <span class="text-[10px] text-slate-400 font-medium">🔒 Sincronización en tiempo real habilitada</span>
               <div class="flex space-x-2">
-                <button type="button" @click="router.push('/tickets')" class="bg-zinc-800 text-zinc-300 font-semibold text-xs px-5 py-2.5 rounded-xl cursor-pointer">Descartar</button>
+                <button type="button" @click="descartarTodo" class="bg-zinc-800 text-zinc-300 font-semibold text-xs px-5 py-2.5 rounded-xl cursor-pointer">Descartar</button>
                 <button type="submit" class="bg-red-700 hover:bg-red-800 text-white font-black text-xs uppercase tracking-wider px-6 py-2.5 rounded-xl shadow-lg cursor-pointer">Enviar Requerimiento</button>
               </div>
             </div>

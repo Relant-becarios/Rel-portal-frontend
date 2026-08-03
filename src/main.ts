@@ -11,13 +11,17 @@ import { DefaultApolloClient } from '@vue/apollo-composable'
 import { auth } from './firebase.ts'
 import router from './router'
 
-// 1. Conexión base a tu servidor Node.js (Puerto 4000)
+// 1. Conexión base a tu servidor Node.js en IIS / Red Local
 const httpLink = createHttpLink({
-  uri: 'https://rel-portal-backend-gitlab.onrender.com',
+  uri: 'http://26.199.22.6:4000', 
 })
 
 // 2. Middleware para inyectar el Token (JWT) de Firebase en los Headers de forma asíncrona
 const authLink = setContext(async (_, { headers }) => {
+  if (auth.authStateReady) {
+    await auth.authStateReady();
+  }
+  
   const usuarioActual = auth.currentUser;
   const token = usuarioActual ? await usuarioActual.getIdToken() : '';
   
@@ -30,7 +34,7 @@ const authLink = setContext(async (_, { headers }) => {
 })
 
 // 3. Inicializar el cliente Apollo uniendo el link de autenticación
-export const apolloClient = new ApolloClient({ // 👈 se agregó "export"
+export const apolloClient = new ApolloClient({
   link: authLink.concat(httpLink),
   cache: new InMemoryCache(),
 })
