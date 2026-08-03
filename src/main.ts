@@ -9,9 +9,9 @@ import { DefaultApolloClient } from '@vue/apollo-composable'
 import { auth } from './firebase.ts'
 import router from './router'
 
-// 🧠 Detecta automáticamente la URL del Backend (Vercel/HTTPS vs Red Local/HTTP)
+// 🚀 URL exacta tomada directamente de tus logs de Render
 const backendUri = window.location.protocol === 'https:'
-  ? 'https://rel-portal-backend.onrender.com'
+  ? 'https://rel-portal-backend-gitlab.onrender.com'
   : 'http://26.199.22.6:4000'
 
 const httpLink = createHttpLink({
