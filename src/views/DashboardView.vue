@@ -450,7 +450,7 @@ const manejarEnviarTicket = async () => {
   } catch (err: any) { alert('Error: ' + err.message) }
 }
 
-// 🎯 BÚSQUEDA EXCLUSIVAMENTE POR TÍTULO / ASUNTO
+// 🎯 BÚSQUEDA Y FILTRADO (PERMITE TODOS LOS TICKETS EN VALIDACIÓN)
 const ticketsFiltradosConPrivacidad = computed(() => {
   const tickets = result.value?.misTickets || []
   const miIdPrisma = result.value?.me?.id || ''
@@ -464,8 +464,10 @@ const ticketsFiltradosConPrivacidad = computed(() => {
     const esAsignadoEmail = miEmail && t.asignado?.email?.toLowerCase() === miEmail
     const esCreadorNombre = miNombre && t.creador?.nombre?.toLowerCase() === miNombre
     const esAsignadoNombre = miNombre && t.asignado?.nombre?.toLowerCase() === miNombre
+    // 🎯 Muestra absolutamente todos los tickets que llegan a Validación (estado COMPLETADO)
+    const esEnValidacion = t.estado === 'COMPLETADO'
 
-    return esCreadorId || esAsignadoId || esCreadorEmail || esAsignadoEmail || esCreadorNombre || esAsignadoNombre
+    return esCreadorId || esAsignadoId || esCreadorEmail || esAsignadoEmail || esCreadorNombre || esAsignadoNombre || esEnValidacion
   })
 
   if (filtroEstado.value === 'PENDIENTES') {
@@ -551,7 +553,7 @@ const cerrarWorkspace = () => {
 
     <div class="flex-1 flex flex-col min-w-0 h-screen overflow-hidden relative">
       
-      <!-- HEADER CON NOMBRE "Tickets" -->
+      <!-- HEADER -->
       <header :class="esModoOscuro ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-slate-200'" class="h-16 border-b px-4 sm:px-8 flex justify-between items-center shrink-0">
         <div class="flex items-center space-x-2 sm:space-x-3 min-w-0">
           <span class="text-[10px] sm:text-xs font-black bg-red-700 text-white px-2 py-0.5 rounded-md tracking-wider">RELANT HQ</span>
@@ -585,7 +587,7 @@ const cerrarWorkspace = () => {
       <div class="flex-1 overflow-y-auto w-full">
         <main class="p-4 sm:p-8 space-y-6 sm:space-y-8 w-full max-w-7xl mx-auto pb-24">
           
-          <!-- 🎯 VENTANA FLOTANTE CENTRADA PARA BORRAR TICKET -->
+          <!-- VENTANA FLOTANTE CENTRADA PARA BORRAR TICKET -->
           <div v-if="mostrarModalEliminar" class="fixed inset-0 bg-zinc-950/80 backdrop-blur-md z-[100] flex items-center justify-center p-4">
             <div :class="esModoOscuro ? 'bg-zinc-900 border-zinc-800 text-white' : 'bg-white border-slate-200 text-slate-800'" class="border rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl text-center space-y-6">
               <div class="w-16 h-16 bg-red-500/10 border border-red-500/30 rounded-2xl flex items-center justify-center mx-auto text-3xl">
@@ -719,7 +721,7 @@ const cerrarWorkspace = () => {
             </div>
           </div>
 
-          <!-- FORMULARIO DE TICKET (SOLO CON BOTÓN DE CLIP) -->
+          <!-- FORMULARIO DE TICKET -->
           <div :class="esModoOscuro ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-slate-200 shadow-sm'" class="w-full rounded-2xl border overflow-hidden text-left">
             <div class="bg-red-700 p-3 sm:p-4 text-white">
               <h3 class="text-xs font-black tracking-wider uppercase">Generar Requerimiento Dirigido</h3>
@@ -819,7 +821,6 @@ const cerrarWorkspace = () => {
               </button>
             </div>
 
-            <!-- 🎯 CAMBIO DE BÚSQUEDA EXCLUSIVAMENTE POR TÍTULO / ASUNTO -->
             <input v-model="busquedaQuery" type="text" placeholder="Buscar por Título / Asunto..." :class="esModoOscuro ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-slate-100 border-slate-300 text-slate-800'" class="px-4 py-2 text-xs rounded-xl focus:outline-none w-full lg:w-64 border" />
           </div>
 
@@ -836,6 +837,11 @@ const cerrarWorkspace = () => {
                     📩 De: <strong class="text-red-500">{{ ticket.creador?.nombre || ticket.creador?.email || 'Mesa' }}</strong>
                     <span class="opacity-40 mx-0.5">➡️</span>
                     👤 Para: <strong class="text-amber-500">{{ ticket.asignado?.nombre || ticket.asignado?.email || 'Sin Asignar' }}</strong>
+                  </span>
+
+                  <!-- 🎯 FECHA DE CREACIÓN DEL TICKET -->
+                  <span class="bg-zinc-950/60 border border-zinc-800 text-zinc-400 px-2 py-0.5 rounded-md text-[10px] font-bold" title="Fecha y hora de creación">
+                    📅 Creado: {{ parsearFecha(ticket.fecha_recibido)?.toLocaleString([], { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) || 'Sin fecha' }}
                   </span>
                   
                   <select :value="ticket.prioridad || 'BAJA'" @change="(e) => ejecutarCambioPrioridad(ticket.id, (e.target as HTMLSelectElement).value)" :class="obtenerColorPrioridad(ticket.prioridad)" class="px-2 py-0.5 rounded-md text-[10px] font-bold uppercase cursor-pointer border">
@@ -861,7 +867,7 @@ const cerrarWorkspace = () => {
                   <span v-if="ticket.devoluciones > 0" class="bg-red-500/10 border border-red-500/30 text-red-500 px-2 py-0.5 rounded-md text-[10px] font-bold">⚠️ {{ ticket.devoluciones }} Devolución(es)</span>
                 </div>
 
-                <!-- 🎯 BOTÓN '✕' PARA DESPLEGAR MODAL DE ELIMINACIÓN -->
+                <!-- BOTÓN '✕' PARA DESPLEGAR MODAL DE ELIMINACIÓN -->
                 <button 
                   @click.stop="abrirModalEliminar(ticket)" 
                   class="absolute top-4 right-4 sm:static text-orange-500 hover:text-red-500 hover:bg-red-500/10 font-black text-xl w-8 h-8 rounded-xl flex items-center justify-center transition cursor-pointer"
