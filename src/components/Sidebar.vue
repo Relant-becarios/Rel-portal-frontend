@@ -80,6 +80,18 @@ const cerrarSesion = async () => {
           <span v-if="!colapsado" class="truncate">Tickets</span>
         </router-link>
 
+        <!-- 🚗 NUEVA ZONA: PRÉSTAMO DE VEHÍCULOS -->
+        <router-link 
+          to="/prestamo-vehiculos" 
+          class="flex items-center space-x-3 px-4 py-3 rounded-xl transition text-xs font-bold"
+          :class="dark ? 'text-zinc-400 hover:text-white hover:bg-zinc-800/80' : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'"
+          active-class="bg-red-700 !text-white font-black shadow-lg"
+          :title="colapsado ? 'Préstamo de Vehículos' : ''"
+        >
+          <span class="text-base shrink-0">🚗</span>
+          <span v-if="!colapsado" class="truncate">Préstamo de Vehículos</span>
+        </router-link>
+
         <a 
           href="https://relantapi.netlify.app/" 
           target="_blank" 
