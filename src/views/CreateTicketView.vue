@@ -163,7 +163,11 @@ const manejarEnviarTicket = async () => {
     })
     
     alert('📧 Requerimiento generado y despachado con éxito.')
-    router.push('/tickets')
+    
+    // Redirige a la vista principal y recarga para ver los cambios de inmediato
+    router.push('/tickets').then(() => {
+      window.location.reload()
+    })
   } catch (err: unknown) {
     const errorMutation = err as Error
     alert('Error al despachar requerimiento: ' + errorMutation.message)
@@ -233,7 +237,7 @@ const manejarEnviarTicket = async () => {
                 </select>
               </div>
 
-              <!-- 📅 CAMPO FECHA LÍMITE DE ENTREGA -->
+              <!-- 📅 FECHA LÍMITE DE ENTREGA ESPERADA -->
               <div class="flex items-center">
                 <label class="w-20 text-xs font-bold text-slate-400 uppercase tracking-wider">Límite:</label>
                 <input v-model="fechaEntregaEsperada" type="date" class="flex-1 text-xs p-2.5 rounded-xl border focus:outline-none cursor-pointer font-bold bg-zinc-950 border-zinc-800 text-white" />

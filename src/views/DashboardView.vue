@@ -263,7 +263,7 @@ onMounted(() => {
   cargarProyectosFirebase()
 })
 
-// GRAPHQL
+// GRAPHQL CON AUTO-POLLING CADA 3 SEGUNDOS
 const OBTENER_DATOS_DASHBOARD = gql`
   query GetDashboardData {
     me { id nombre email rol fotoUrl }
@@ -275,7 +275,14 @@ const OBTENER_DATOS_DASHBOARD = gql`
     }
   }
 `
-const { result, loading, refetch } = useQuery<{ me: any, todosUsuarios: Usuario[], misTickets: any[] }>(OBTENER_DATOS_DASHBOARD)
+const { result, loading, refetch } = useQuery<{ me: any, todosUsuarios: Usuario[], misTickets: any[] }>(
+  OBTENER_DATOS_DASHBOARD,
+  null,
+  {
+    fetchPolicy: 'network-only',
+    pollInterval: 3000
+  }
+)
 
 const CREAR_TICKET = gql`
   mutation NuevoTicket($titulo: String!, $descripcion: String!, $asignadosEmails: [String], $archivos: [String], $prioridad: String, $proyecto: String, $horasEstimadas: Int, $fechaEntrega: String) {
@@ -313,6 +320,7 @@ const { mutate: apiChat } = useMutation(ENVIAR_MENSAJE_CHAT)
 const { mutate: apiCambiarPrioridad } = useMutation(CAMBIAR_PRIORIDAD_MUTATION)
 const { mutate: apiEliminarTicket } = useMutation(ELIMINAR_TICKET_MUTATION)
 
+// Rol de Evaluación: Habilita permisos para ADMIN, OWNER y JEFE
 const esAdmin = computed(() => ['ADMIN', 'OWNER', 'JEFE'].includes(result.value?.me?.rol))
 
 const abrirModalEliminar = (ticket: any) => {
@@ -464,7 +472,7 @@ const manejarEnviarTicket = async () => {
     })
     alert('📧 Requerimiento despachado con éxito.')
     limpiarFormularioCompleto()
-    refetch()
+    await refetch()
   } catch (err: any) { 
     alert('Error: ' + err.message) 
   } finally {
@@ -477,9 +485,13 @@ const ticketsFiltradosConPrivacidad = computed(() => {
   const miIdPrisma = result.value?.me?.id || ''
   const miEmail = result.value?.me?.email?.toLowerCase() || ''
   const miNombre = result.value?.me?.nombre?.toLowerCase() || ''
-  const soyAdmin = result.value?.me?.rol === 'ADMIN'
+  const userRol = result.value?.me?.rol || ''
+  const esJefeOOwner = ['OWNER', 'JEFE'].includes(userRol)
+  const esAdminRol = userRol === 'ADMIN'
 
   let filtrados = tickets.filter((t: any) => {
+    if (esJefeOOwner) return true
+
     const esCreadorId = t.creadorId === miIdPrisma
     const esAsignadoId = t.asignadoId === miIdPrisma
     const esCreadorEmail = miEmail && t.creador?.email?.toLowerCase() === miEmail
@@ -487,7 +499,7 @@ const ticketsFiltradosConPrivacidad = computed(() => {
     const esCreadorNombre = miNombre && t.creador?.nombre?.toLowerCase() === miNombre
     const esAsignadoNombre = miNombre && t.asignado?.nombre?.toLowerCase() === miNombre
     
-    const esEnValidacionAdmin = soyAdmin && t.estado === 'COMPLETADO'
+    const esEnValidacionAdmin = esAdminRol && t.estado === 'COMPLETADO'
 
     return esCreadorId || esAsignadoId || esCreadorEmail || esAsignadoEmail || esCreadorNombre || esAsignadoNombre || esEnValidacionAdmin
   })
@@ -710,6 +722,7 @@ const cerrarWorkspace = () => {
                     <div v-for="(log, i) in bitacoraProgresoAcumulada" :key="i" :class="esModoOscuro ? 'bg-zinc-900 border-zinc-800/40 text-zinc-300' : 'bg-white border-slate-200 text-slate-700'" class="p-2 rounded-lg border wrap-break-word">{{ log }}</div>
                   </div>
 
+                  <!-- BOTONES MIENTRAS ESTÁ EN DESARROLLO -->
                   <div v-if="ticketActivoWorkspace.estado === 'TRABAJANDO'" class="space-y-3 pt-2 border-t" :class="esModoOscuro ? 'border-zinc-800' : 'border-slate-200'">
                     <div class="flex gap-2">
                       <input v-model="notaProgresoActual" @keyup.enter="registrarProgresoEnCaliente" type="text" placeholder="Escribe un avance..." :class="esModoOscuro ? 'bg-zinc-900 border-zinc-800 text-white' : 'bg-white border-slate-300 text-slate-800'" class="rounded-xl px-3 py-2 text-xs flex-1 border focus:outline-none" />
@@ -718,6 +731,7 @@ const cerrarWorkspace = () => {
                     <button @click="despacharAuditoriaAdmin" class="w-full bg-red-700 hover:bg-red-800 text-white font-black text-xs uppercase tracking-widest py-2.5 rounded-xl shadow-md cursor-pointer">🏁 Enviar a Validación</button>
                   </div>
 
+                  <!-- CAJA DE EVALUACIÓN / DICTAMEN (APROBAR / RECHAZAR) -->
                   <div v-if="ticketActivoWorkspace.estado === 'COMPLETADO' && esAdmin" class="space-y-3 pt-2 border-t" :class="esModoOscuro ? 'border-zinc-800' : 'border-slate-200'">
                     <div>
                       <label class="text-[10px] uppercase font-bold block mb-1" :class="esModoOscuro ? 'text-zinc-400' : 'text-slate-500'">Comentario de Dictamen (Obligatorio)</label>
@@ -796,7 +810,7 @@ const cerrarWorkspace = () => {
                   <input v-model.number="horasObjetivoTicket" type="number" min="1" max="500" :class="esModoOscuro ? 'bg-zinc-950 border-zinc-800 text-white' : 'bg-slate-100 border-slate-300 text-slate-800'" class="flex-1 text-xs p-2.5 rounded-xl border focus:outline-none font-bold" placeholder="Ej. 10" />
                 </div>
 
-                <!-- 📅 CAMPO DE FECHA LÍMITE / ENTREGA ESPERADA -->
+                <!-- 📅 FECHA LÍMITE DE ENTREGA ESPERADA -->
                 <div class="flex items-center">
                   <label class="w-20 text-xs font-bold uppercase" :class="esModoOscuro ? 'text-zinc-400' : 'text-slate-500'">Límite:</label>
                   <input v-model="fechaEntregaEsperada" type="date" :class="esModoOscuro ? 'bg-zinc-950 border-zinc-800 text-white' : 'bg-slate-100 border-slate-300 text-slate-800'" class="flex-1 text-xs p-2.5 rounded-xl border focus:outline-none font-bold cursor-pointer" />
@@ -879,12 +893,12 @@ const cerrarWorkspace = () => {
                     👤 Para: <strong class="text-amber-500">{{ ticket.asignado?.nombre || ticket.asignado?.email || 'Sin Asignar' }}</strong>
                   </span>
 
-                  <!-- FECHA DE CREACIÓN DEL TICKET -->
+                  <!-- FECHA DE CREACIÓN -->
                   <span class="bg-zinc-950/60 border border-zinc-800 text-zinc-400 px-2 py-0.5 rounded-md text-[10px] font-bold" title="Fecha y hora de creación">
                     📅 Creado: {{ parsearFecha(ticket.fecha_recibido)?.toLocaleString([], { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) || 'Sin fecha' }}
                   </span>
 
-                  <!-- FECHA LÍMITE SI FUE DEFINIDA -->
+                  <!-- FECHA LÍMITE -->
                   <span v-if="ticket.fechaEntrega" class="bg-amber-950/60 border border-amber-800 text-amber-400 px-2 py-0.5 rounded-md text-[10px] font-bold" title="Fecha límite de entrega esperada">
                     🎯 Límite: {{ formatearFechaVisual(ticket.fechaEntrega) }}
                   </span>
