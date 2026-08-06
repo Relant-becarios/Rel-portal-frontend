@@ -450,12 +450,13 @@ const manejarEnviarTicket = async () => {
   } catch (err: any) { alert('Error: ' + err.message) }
 }
 
-// 🎯 BÚSQUEDA Y FILTRADO (PERMITE TODOS LOS TICKETS EN VALIDACIÓN)
+// 🎯 BÚSQUEDA Y FILTRADO (SOLO ADMINS VEN TODOS LOS TICKETS EN VALIDACIÓN)
 const ticketsFiltradosConPrivacidad = computed(() => {
   const tickets = result.value?.misTickets || []
   const miIdPrisma = result.value?.me?.id || ''
   const miEmail = result.value?.me?.email?.toLowerCase() || ''
   const miNombre = result.value?.me?.nombre?.toLowerCase() || ''
+  const soyAdmin = result.value?.me?.rol === 'ADMIN'
 
   let filtrados = tickets.filter((t: any) => {
     const esCreadorId = t.creadorId === miIdPrisma
@@ -464,10 +465,11 @@ const ticketsFiltradosConPrivacidad = computed(() => {
     const esAsignadoEmail = miEmail && t.asignado?.email?.toLowerCase() === miEmail
     const esCreadorNombre = miNombre && t.creador?.nombre?.toLowerCase() === miNombre
     const esAsignadoNombre = miNombre && t.asignado?.nombre?.toLowerCase() === miNombre
-    // 🎯 Muestra absolutamente todos los tickets que llegan a Validación (estado COMPLETADO)
-    const esEnValidacion = t.estado === 'COMPLETADO'
+    
+    // 🎯 Únicamente los administradores ven todos los tickets en la pestaña de Validación
+    const esEnValidacionAdmin = soyAdmin && t.estado === 'COMPLETADO'
 
-    return esCreadorId || esAsignadoId || esCreadorEmail || esAsignadoEmail || esCreadorNombre || esAsignadoNombre || esEnValidacion
+    return esCreadorId || esAsignadoId || esCreadorEmail || esAsignadoEmail || esCreadorNombre || esAsignadoNombre || esEnValidacionAdmin
   })
 
   if (filtroEstado.value === 'PENDIENTES') {
@@ -839,7 +841,7 @@ const cerrarWorkspace = () => {
                     👤 Para: <strong class="text-amber-500">{{ ticket.asignado?.nombre || ticket.asignado?.email || 'Sin Asignar' }}</strong>
                   </span>
 
-                  <!-- 🎯 FECHA DE CREACIÓN DEL TICKET -->
+                  <!-- FECHA DE CREACIÓN DEL TICKET -->
                   <span class="bg-zinc-950/60 border border-zinc-800 text-zinc-400 px-2 py-0.5 rounded-md text-[10px] font-bold" title="Fecha y hora de creación">
                     📅 Creado: {{ parsearFecha(ticket.fecha_recibido)?.toLocaleString([], { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) || 'Sin fecha' }}
                   </span>

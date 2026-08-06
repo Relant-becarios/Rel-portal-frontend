@@ -5,9 +5,16 @@ import './style.css'
 import { ApolloClient, createHttpLink, InMemoryCache } from '@apollo/client/core'
 import { setContext } from '@apollo/client/link/context'
 import { DefaultApolloClient } from '@vue/apollo-composable'
+import { loadErrorMessages, loadDevMessages } from '@apollo/client/dev'
 
 import { auth } from './firebase.ts'
 import router from './router'
+
+// 🚀 Carga los mensajes de error explicativos de Apollo en entorno de desarrollo
+if (import.meta.env.DEV) {
+  loadDevMessages()
+  loadErrorMessages()
+}
 
 // 🚀 URL exacta tomada directamente de tus logs de Render
 const backendUri = window.location.protocol === 'https:'
