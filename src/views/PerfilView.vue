@@ -10,7 +10,8 @@ const esModoOscuro = ref(true)
 
 const nombreUsuario = ref('')
 const descripcionUsuario = ref('')
-const fotoBase64 = ref('')
+const fotoUrl = ref('')
+const archivoFotoRaw = ref<File | null>(null)
 const fotoInputRef = ref<HTMLInputElement | null>(null)
 const guardando = ref(false)
 
@@ -48,11 +49,19 @@ const { mutate: apiActualizarPerfil } = useMutation(ACTUALIZAR_PERFIL_MUTATION)
 
 const usuario = computed(() => result.value?.me || null)
 
+// Calcula la vista previa de la foto (si hay un archivo local nuevo o si se usa la URL previa)
+const fotoPreview = computed(() => {
+  if (archivoFotoRaw.value) {
+    return URL.createObjectURL(archivoFotoRaw.value)
+  }
+  return fotoUrl.value
+})
+
 watch(usuario, (val) => {
   if (val) {
     nombreUsuario.value = val.nombre || ''
     descripcionUsuario.value = val.descripcion || ''
-    fotoBase64.value = val.fotoUrl || ''
+    fotoUrl.value = val.fotoUrl || ''
   }
 }, { immediate: true })
 
@@ -61,25 +70,37 @@ onMounted(() => {
   esModoOscuro.value = temaGuardado ? temaGuardado === 'oscuro' : true
 })
 
+// ☁️ FUNCIÓN DE SUBIDA DIRECTA A CLOUDINARY
+const subirACloudinary = async (file: File): Promise<string> => {
+  const formData = new FormData()
+  formData.append('file', file)
+  formData.append('upload_preset', 'ls6wqdvy')
+
+  const response = await fetch('https://api.cloudinary.com/v1_1/pldkd8np/image/upload', {
+    method: 'POST',
+    body: formData
+  })
+
+  const data = await response.json()
+  return data.secure_url || ''
+}
+
 const seleccionarFoto = (event: Event) => {
   const target = event.target as HTMLInputElement
   const file = target.files?.[0]
   if (!file) return
 
-  if (file.size > 5 * 1024 * 1024) {
-    alert('⚠️ La imagen no debe superar los 5MB.')
+  if (file.size > 10 * 1024 * 1024) {
+    alert('⚠️ La imagen no debe superar los 10MB.')
     return
   }
 
-  const reader = new FileReader()
-  reader.onload = () => {
-    fotoBase64.value = reader.result as string
-  }
-  reader.readAsDataURL(file)
+  archivoFotoRaw.value = file
 }
 
 const quitarFoto = () => {
-  fotoBase64.value = ''
+  fotoUrl.value = ''
+  archivoFotoRaw.value = null
   if (fotoInputRef.value) fotoInputRef.value.value = ''
 }
 
@@ -91,13 +112,22 @@ const guardarPerfil = async () => {
 
   guardando.value = true
   try {
+    let urlFinalFoto = fotoUrl.value
+
+    // Si el usuario seleccionó un archivo de imagen nuevo, se sube primero a Cloudinary
+    if (archivoFotoRaw.value) {
+      urlFinalFoto = await subirACloudinary(archivoFotoRaw.value)
+    }
+
     await apiActualizarPerfil({
       nombre: nombreUsuario.value.trim(),
-      fotoUrl: fotoBase64.value,
+      fotoUrl: urlFinalFoto,
       descripcion: descripcionUsuario.value.trim()
     })
+    
+    archivoFotoRaw.value = null
     await refetch()
-    alert('✅ ¡Perfil actualizado correctamente!')
+    alert('✅ ¡Perfil e imagen actualizados correctamente!')
   } catch (err: any) {
     alert('Error al guardar el perfil: ' + err.message)
   } finally {
@@ -153,7 +183,7 @@ const guardarPerfil = async () => {
           <div class="flex flex-col sm:flex-row items-center gap-6 border-b pb-8" :class="esModoOscuro ? 'border-zinc-800' : 'border-slate-200'">
             <div class="relative group cursor-pointer" @click="fotoInputRef?.click()">
               <div class="w-28 h-28 rounded-full overflow-hidden border-4 border-red-700 bg-zinc-800 flex items-center justify-center shadow-xl">
-                <img v-if="fotoBase64" :src="fotoBase64" alt="Foto de Perfil" class="w-full h-full object-cover" />
+                <img v-if="fotoPreview" :src="fotoPreview" alt="Foto de Perfil" class="w-full h-full object-cover" />
                 <span v-else class="text-4xl font-black text-white">{{ nombreUsuario.charAt(0).toUpperCase() || '👤' }}</span>
               </div>
               <div class="absolute inset-0 bg-black/60 rounded-full flex items-center justify-center text-white opacity-0 group-hover:opacity-100 transition-opacity text-xs font-bold">
@@ -170,7 +200,7 @@ const guardarPerfil = async () => {
               </span>
             </div>
 
-            <div v-if="fotoBase64" class="sm:ml-auto">
+            <div v-if="fotoPreview" class="sm:ml-auto">
               <button type="button" @click="quitarFoto" class="text-xs text-red-500 hover:underline font-bold">✕ Eliminar foto</button>
             </div>
           </div>
@@ -193,8 +223,8 @@ const guardarPerfil = async () => {
           </div>
 
           <div class="flex justify-end pt-4 border-t" :class="esModoOscuro ? 'border-zinc-800' : 'border-slate-200'">
-            <button type="submit" :disabled="guardando" class="w-full sm:w-auto bg-red-700 hover:bg-red-800 text-white font-black text-xs uppercase tracking-widest px-8 py-3.5 rounded-xl cursor-pointer shadow-md transition-all">
-              {{ guardando ? '💾 Guardando...' : 'Guardar Cambios de Perfil' }}
+            <button type="submit" :disabled="guardando" class="w-full sm:w-auto bg-red-700 hover:bg-red-800 text-white font-black text-xs uppercase tracking-widest px-8 py-3.5 rounded-xl cursor-pointer shadow-md transition-all disabled:opacity-50">
+              {{ guardando ? '⏳ Subiendo foto y guardando...' : 'Guardar Cambios de Perfil' }}
             </button>
           </div>
         </form>

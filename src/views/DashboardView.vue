@@ -25,11 +25,12 @@ const correoDestinatario = ref('')
 const asuntoTicket = ref('')
 const cuerpoTicket = ref('')
 const horasObjetivoTicket = ref(10)
-const listaArchivosBase64 = ref<{ nombre: string; data: string }[]>([])
+const listaArchivosRaw = ref<File[]>([])
 const fileInputRef = ref<HTMLInputElement | null>(null)
 const prioridadTicket = ref('BAJA')
 const proyectoTicket = ref('')
 const usarHitoManual = ref(false)
+const subiendoArchivos = ref(false)
 
 // Modal de Eliminación
 const ticketAEliminar = ref<any | null>(null)
@@ -208,6 +209,21 @@ const obtenerResumenTiempoSla = (ticket: any) => {
   }
 }
 
+// ☁️ FUNCIÓN DE SUBIDA DIRECTA A CLOUDINARY
+const subirACloudinary = async (file: File): Promise<string> => {
+  const formData = new FormData()
+  formData.append('file', file)
+  formData.append('upload_preset', 'ls6wqdvy')
+
+  const response = await fetch('https://api.cloudinary.com/v1_1/pldkd8np/image/upload', {
+    method: 'POST',
+    body: formData
+  })
+
+  const data = await response.json()
+  return data.secure_url || ''
+}
+
 const manejarSubidaArchivosMultiples = (event: Event) => {
   const target = event.target as HTMLInputElement
   const files = target.files
@@ -218,15 +234,7 @@ const manejarSubidaArchivosMultiples = (event: Event) => {
       alert(`⚠️ El archivo "${file.name}" supera el límite de 10MB.`)
       return
     }
-
-    const reader = new FileReader()
-    reader.onload = () => {
-      listaArchivosBase64.value.push({
-        nombre: file.name,
-        data: reader.result as string
-      })
-    }
-    reader.readAsDataURL(file)
+    listaArchivosRaw.value.push(file)
   })
 }
 
@@ -241,7 +249,7 @@ const limpiarFormularioCompleto = () => {
   proyectoTicket.value = ''
   prioridadTicket.value = 'BAJA'
   horasObjetivoTicket.value = 10
-  listaArchivosBase64.value = []
+  listaArchivosRaw.value = []
   if (fileInputRef.value) fileInputRef.value.value = ''
 }
 
@@ -431,15 +439,24 @@ const descargarReportePdf = () => {
 
 const manejarEnviarTicket = async () => {
   if (!asuntoTicket.value || !cuerpoTicket.value) return
-  const arregloArchivosEnviables = listaArchivosBase64.value.map(f => JSON.stringify(f))
-  const listaCorreos = correoDestinatario.value.split(',').map(c => c.trim()).filter(c => c.length > 0)
+
+  subiendoArchivos.value = true
 
   try {
+    // 1. Subir archivos a Cloudinary y recolectar sus URLs
+    const urlsCloudinary = await Promise.all(
+      listaArchivosRaw.value.map(file => subirACloudinary(file))
+    )
+    const urlsValidas = urlsCloudinary.filter(url => url !== '')
+
+    const listaCorreos = correoDestinatario.value.split(',').map(c => c.trim()).filter(c => c.length > 0)
+
+    // 2. Enviar la mutación GraphQL con las URLs generadas
     await apiCrear({ 
       titulo: asuntoTicket.value, 
       descripcion: cuerpoTicket.value,
       asignadosEmails: listaCorreos,
-      archivos: arregloArchivosEnviables,
+      archivos: urlsValidas,
       prioridad: prioridadTicket.value,
       proyecto: proyectoTicket.value || null,
       horasEstimadas: Number(horasObjetivoTicket.value) || 10
@@ -447,7 +464,11 @@ const manejarEnviarTicket = async () => {
     alert('📧 Requerimiento despachado con éxito.')
     limpiarFormularioCompleto()
     refetch()
-  } catch (err: any) { alert('Error: ' + err.message) }
+  } catch (err: any) { 
+    alert('Error: ' + err.message) 
+  } finally {
+    subiendoArchivos.value = false
+  }
 }
 
 // 🎯 BÚSQUEDA Y FILTRADO (SOLO ADMINS VEN TODOS LOS TICKETS EN VALIDACIÓN)
@@ -658,7 +679,12 @@ const cerrarWorkspace = () => {
                     <label class="text-[10px] uppercase font-bold text-zinc-500 block mb-2">📎 Documentos / Archivos Adjuntos ({{ ticketActivoWorkspace.archivos.length }})</label>
                     <div class="grid grid-cols-1 gap-2">
                       <div v-for="(archivoItem, index) in ticketActivoWorkspace.archivos" :key="index" :class="esModoOscuro ? 'bg-zinc-900/60 border-zinc-800' : 'bg-white border-slate-200'" class="rounded-xl border p-3">
-                        <template v-if="archivoItem.includes('{')">
+                        <template v-if="archivoItem.startsWith('http')">
+                          <a :href="archivoItem" target="_blank" class="bg-red-700 hover:bg-red-800 text-white text-xs font-bold px-4 py-2 rounded-xl flex items-center justify-center gap-2 transition w-full">
+                            📄 Abrir / Descargar Archivo {{ Number(index) + 1 }}
+                          </a>
+                        </template>
+                        <template v-else-if="archivoItem.includes('{')">
                           <div class="flex justify-between items-center text-xs">
                             <span class="font-mono font-bold truncate pr-2" :class="esModoOscuro ? 'text-zinc-300' : 'text-slate-700'">📦 {{ JSON.parse(archivoItem).nombre }}</span>
                             <a :href="JSON.parse(archivoItem).data" :download="JSON.parse(archivoItem).nombre" class="bg-red-700 hover:bg-red-800 text-white font-bold px-3 py-1 rounded-lg text-[10px] uppercase tracking-wider shrink-0 transition">Descargar 💾</a>
@@ -668,7 +694,7 @@ const cerrarWorkspace = () => {
                           <img :src="archivoItem" alt="Evidencia" class="max-w-full max-h-48 object-contain rounded-lg shadow-md mx-auto" />
                         </template>
                         <template v-else>
-                          <a :href="archivoItem" download="adjunto_ticket" class="bg-red-700 hover:bg-red-800 text-white text-xs font-bold px-4 py-2 rounded-xl flex items-center justify-center gap-2 transition w-full">📄 Descargar Archivo {{ Number(index) + 1 }}</a>
+                          <a :href="archivoItem" target="_blank" class="bg-red-700 hover:bg-red-800 text-white text-xs font-bold px-4 py-2 rounded-xl flex items-center justify-center gap-2 transition w-full">📄 Ver Archivo {{ Number(index) + 1 }}</a>
                         </template>
                       </div>
                     </div>
@@ -790,22 +816,24 @@ const cerrarWorkspace = () => {
                   <span>📎</span>
                   <span>Adjuntar archivos</span>
                 </button>
-                <span v-if="listaArchivosBase64.length > 0" class="text-xs text-zinc-400 font-mono font-semibold">
-                  ({{ listaArchivosBase64.length }} seleccionado(s))
+                <span v-if="listaArchivosRaw.length > 0" class="text-xs text-zinc-400 font-mono font-semibold">
+                  ({{ listaArchivosRaw.length }} seleccionado(s))
                 </span>
               </div>
 
-              <div v-if="listaArchivosBase64.length > 0" class="flex flex-wrap gap-2 pt-1">
-                <span v-for="(f, i) in listaArchivosBase64" :key="i" class="bg-zinc-800 text-zinc-200 text-[10px] font-mono px-2.5 py-1 rounded-lg border border-zinc-700 flex items-center gap-1.5">
-                  📦 {{ f.nombre }}
-                  <button type="button" @click="listaArchivosBase64.splice(i, 1)" class="text-red-400 font-bold hover:text-red-300 ml-1 cursor-pointer">✕</button>
+              <div v-if="listaArchivosRaw.length > 0" class="flex flex-wrap gap-2 pt-1">
+                <span v-for="(f, i) in listaArchivosRaw" :key="i" class="bg-zinc-800 text-zinc-200 text-[10px] font-mono px-2.5 py-1 rounded-lg border border-zinc-700 flex items-center gap-1.5">
+                  📦 {{ f.name }}
+                  <button type="button" @click="listaArchivosRaw.splice(i, 1)" class="text-red-400 font-bold hover:text-red-300 ml-1 cursor-pointer">✕</button>
                 </span>
               </div>
 
               <textarea v-model="cuerpoTicket" rows="3" required :class="esModoOscuro ? 'bg-zinc-950 border-zinc-800 text-white' : 'bg-slate-100 border-slate-300 text-slate-800'" class="w-full p-3 sm:p-4 text-sm rounded-xl border focus:outline-none" placeholder="Especificaciones técnicas..."></textarea>
               
               <div class="flex justify-end">
-                <button type="submit" class="w-full sm:w-auto bg-red-700 hover:bg-red-800 text-white font-black text-xs uppercase tracking-widest px-6 py-2.5 rounded-xl cursor-pointer shadow-md">Despachar Ticket</button>
+                <button type="submit" :disabled="subiendoArchivos" class="w-full sm:w-auto bg-red-700 hover:bg-red-800 text-white font-black text-xs uppercase tracking-widest px-6 py-2.5 rounded-xl cursor-pointer shadow-md disabled:opacity-50">
+                  {{ subiendoArchivos ? '⏳ Subiendo archivos...' : 'Despachar Ticket' }}
+                </button>
               </div>
             </form>
           </div>

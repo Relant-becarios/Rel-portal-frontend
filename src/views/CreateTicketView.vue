@@ -14,8 +14,9 @@ const prioridadTicket = ref('BAJA')
 const proyectoTicket = ref('')
 const asuntoTicket = ref('')
 const cuerpoTicket = ref('')
-const listaArchivosBase64 = ref<{ nombre: string; data: string }[]>([])
+const listaArchivosRaw = ref<File[]>([])
 const fileInputRef = ref<HTMLInputElement | null>(null)
+const subiendoArchivos = ref(false)
 
 // Lista de proyectos de Firebase
 const listaProyectos = ref<string[]>([])
@@ -85,6 +86,21 @@ const ocultarSugerenciasConRetraso = () => {
   setTimeout(() => { mostrarSugerencias.value = false }, 200)
 }
 
+// ☁️ FUNCIÓN DE SUBIDA DIRECTA A CLOUDINARY
+const subirACloudinary = async (file: File): Promise<string> => {
+  const formData = new FormData()
+  formData.append('file', file)
+  formData.append('upload_preset', 'ls6wqdvy')
+
+  const response = await fetch('https://api.cloudinary.com/v1_1/pldkd8np/image/upload', {
+    method: 'POST',
+    body: formData
+  })
+
+  const data = await response.json()
+  return data.secure_url || ''
+}
+
 const manejarSubidaArchivosMultiples = (event: Event) => {
   const target = event.target as HTMLInputElement
   const files = target.files
@@ -95,15 +111,7 @@ const manejarSubidaArchivosMultiples = (event: Event) => {
       alert(`⚠️ El archivo "${file.name}" supera el límite de 10MB.`)
       return
     }
-
-    const reader = new FileReader()
-    reader.onload = () => {
-      listaArchivosBase64.value.push({
-        nombre: file.name,
-        data: reader.result as string
-      })
-    }
-    reader.readAsDataURL(file)
+    listaArchivosRaw.value.push(file)
   })
 }
 
@@ -117,7 +125,7 @@ const descartarTodo = () => {
   correoDestinatario.value = ''
   proyectoTicket.value = ''
   prioridadTicket.value = 'BAJA'
-  listaArchivosBase64.value = []
+  listaArchivosRaw.value = []
   if (fileInputRef.value) fileInputRef.value.value = ''
   router.push('/tickets')
 }
@@ -132,15 +140,23 @@ const { mutate: crearTicket } = useMutation(CREAR_TICKET_MUTATION)
 const manejarEnviarTicket = async () => {
   if (!asuntoTicket.value || !cuerpoTicket.value) return
 
-  const arregloArchivosEnviables = listaArchivosBase64.value.map(f => JSON.stringify(f))
-  const listaCorreos = correoDestinatario.value.split(',').map(c => c.trim()).filter(c => c.length > 0)
+  subiendoArchivos.value = true
 
   try {
+    // 1. Subir todos los archivos a Cloudinary en paralelo y obtener sus URLs
+    const urlsCloudinary = await Promise.all(
+      listaArchivosRaw.value.map(file => subirACloudinary(file))
+    )
+    const urlsValidas = urlsCloudinary.filter(url => url !== '')
+
+    const listaCorreos = correoDestinatario.value.split(',').map(c => c.trim()).filter(c => c.length > 0)
+
+    // 2. Enviar la mutación con las URLs
     await crearTicket({ 
       titulo: asuntoTicket.value, 
       descripcion: cuerpoTicket.value,
       asignadosEmails: listaCorreos,
-      archivos: arregloArchivosEnviables,
+      archivos: urlsValidas,
       prioridad: prioridadTicket.value,
       proyecto: proyectoTicket.value || null
     })
@@ -150,6 +166,8 @@ const manejarEnviarTicket = async () => {
   } catch (err: unknown) {
     const errorMutation = err as Error
     alert('Error al despachar requerimiento: ' + errorMutation.message)
+  } finally {
+    subiendoArchivos.value = false
   }
 }
 </script>
@@ -227,15 +245,15 @@ const manejarEnviarTicket = async () => {
                 <span>📎</span>
                 <span>Adjuntar archivos</span>
               </button>
-              <span v-if="listaArchivosBase64.length > 0" class="text-xs text-zinc-400 font-mono font-semibold">
-                ({{ listaArchivosBase64.length }} seleccionado(s))
+              <span v-if="listaArchivosRaw.length > 0" class="text-xs text-zinc-400 font-mono font-semibold">
+                ({{ listaArchivosRaw.length }} seleccionado(s))
               </span>
             </div>
 
-            <div v-if="listaArchivosBase64.length > 0" class="flex flex-wrap gap-2 pt-1">
-              <span v-for="(f, i) in listaArchivosBase64" :key="i" class="bg-zinc-800 text-zinc-200 text-[10px] font-mono px-2.5 py-1 rounded-lg border border-zinc-700 flex items-center gap-1.5">
-                📦 {{ f.nombre }}
-                <button type="button" @click="listaArchivosBase64.splice(i, 1)" class="text-red-400 font-bold hover:text-red-300 ml-1 cursor-pointer">✕</button>
+            <div v-if="listaArchivosRaw.length > 0" class="flex flex-wrap gap-2 pt-1">
+              <span v-for="(f, i) in listaArchivosRaw" :key="i" class="bg-zinc-800 text-zinc-200 text-[10px] font-mono px-2.5 py-1 rounded-lg border border-zinc-700 flex items-center gap-1.5">
+                📦 {{ f.name }}
+                <button type="button" @click="listaArchivosRaw.splice(i, 1)" class="text-red-400 font-bold hover:text-red-300 ml-1 cursor-pointer">✕</button>
               </span>
             </div>
 
@@ -247,7 +265,9 @@ const manejarEnviarTicket = async () => {
               <span class="text-[10px] text-slate-400 font-medium">🔒 Sincronización en tiempo real habilitada</span>
               <div class="flex space-x-2">
                 <button type="button" @click="descartarTodo" class="bg-zinc-800 text-zinc-300 font-semibold text-xs px-5 py-2.5 rounded-xl cursor-pointer">Descartar</button>
-                <button type="submit" class="bg-red-700 hover:bg-red-800 text-white font-black text-xs uppercase tracking-wider px-6 py-2.5 rounded-xl shadow-lg cursor-pointer">Enviar Requerimiento</button>
+                <button type="submit" :disabled="subiendoArchivos" class="bg-red-700 hover:bg-red-800 text-white font-black text-xs uppercase tracking-wider px-6 py-2.5 rounded-xl shadow-lg cursor-pointer disabled:opacity-50">
+                  {{ subiendoArchivos ? '⏳ Subiendo archivos...' : 'Enviar Requerimiento' }}
+                </button>
               </div>
             </div>
           </form>
