@@ -25,6 +25,7 @@ const correoDestinatario = ref('')
 const asuntoTicket = ref('')
 const cuerpoTicket = ref('')
 const horasObjetivoTicket = ref(10)
+const fechaEntregaEsperada = ref('')
 const listaArchivosRaw = ref<File[]>([])
 const fileInputRef = ref<HTMLInputElement | null>(null)
 const prioridadTicket = ref('BAJA')
@@ -249,6 +250,7 @@ const limpiarFormularioCompleto = () => {
   proyectoTicket.value = ''
   prioridadTicket.value = 'BAJA'
   horasObjetivoTicket.value = 10
+  fechaEntregaEsperada.value = ''
   listaArchivosRaw.value = []
   if (fileInputRef.value) fileInputRef.value.value = ''
 }
@@ -267,7 +269,7 @@ const OBTENER_DATOS_DASHBOARD = gql`
     me { id nombre email rol fotoUrl }
     todosUsuarios { id nombre email }
     misTickets {
-      id titulo descripcion estado comentario_admin fecha_recibido fecha_trabajando fecha_completado fecha_evaluacion creadorId asignadoId chat archivo archivos prioridad proyecto horasEstimadas devoluciones
+      id titulo descripcion estado comentario_admin fecha_recibido fecha_trabajando fecha_completado fecha_evaluacion fechaEntrega creadorId asignadoId chat archivo archivos prioridad proyecto horasEstimadas devoluciones
       creador { email nombre }
       asignado { email nombre }
     }
@@ -276,8 +278,8 @@ const OBTENER_DATOS_DASHBOARD = gql`
 const { result, loading, refetch } = useQuery<{ me: any, todosUsuarios: Usuario[], misTickets: any[] }>(OBTENER_DATOS_DASHBOARD)
 
 const CREAR_TICKET = gql`
-  mutation NuevoTicket($titulo: String!, $descripcion: String!, $asignadosEmails: [String], $archivos: [String], $prioridad: String, $proyecto: String, $horasEstimadas: Int) {
-    crearTicket(titulo: $titulo, descripcion: $descripcion, asignadosEmails: $asignadosEmails, archivos: $archivos, prioridad: $prioridad, proyecto: $proyecto, horasEstimadas: $horasEstimadas) { id }
+  mutation NuevoTicket($titulo: String!, $descripcion: String!, $asignadosEmails: [String], $archivos: [String], $prioridad: String, $proyecto: String, $horasEstimadas: Int, $fechaEntrega: String) {
+    crearTicket(titulo: $titulo, descripcion: $descripcion, asignadosEmails: $asignadosEmails, archivos: $archivos, prioridad: $prioridad, proyecto: $proyecto, horasEstimadas: $horasEstimadas, fechaEntrega: $fechaEntrega) { id }
   }
 `
 const INICIAR_TRABAJO = gql` mutation Iniciar($ticketId: String!) { iniciarTrabajo(ticketId: $ticketId) { id estado } } `
@@ -378,7 +380,7 @@ const descargarReporteExcel = () => {
       <table>
         <thead>
           <tr>
-            <th>Folio</th><th>Título</th><th>Descripción</th><th>Prioridad</th><th>Proyecto</th><th>Espera Previa</th><th>Atención Real</th><th>Meta SLA</th><th>Estado</th><th>Fecha Recibido</th><th>Creador</th><th>Asignado</th>
+            <th>Folio</th><th>Título</th><th>Descripción</th><th>Prioridad</th><th>Proyecto</th><th>Espera Previa</th><th>Atención Real</th><th>Meta SLA</th><th>Fecha Límite</th><th>Estado</th><th>Fecha Recibido</th><th>Creador</th><th>Asignado</th>
           </tr>
         </thead>
         <tbody>
@@ -389,7 +391,7 @@ const descargarReporteExcel = () => {
     const infoSla = obtenerResumenTiempoSla(t)
     tablaHtml += `
       <tr>
-        <td>${folio}</td><td>${t.titulo || ''}</td><td>${t.descripcion || ''}</td><td>${t.prioridad || 'BAJA'}</td><td>${t.proyecto || 'General'}</td><td>${infoSla.tiempoEsperaTexto}</td><td>${infoSla.textoTiempo}</td><td>${infoSla.horasLimite}h</td><td>${t.estado || ''}</td><td>${parsearFecha(t.fecha_recibido)?.toLocaleString() || ''}</td><td>${t.creador?.nombre || t.creador?.email || ''}</td><td>${t.asignado?.nombre || t.asignado?.email || ''}</td>
+        <td>${folio}</td><td>${t.titulo || ''}</td><td>${t.descripcion || ''}</td><td>${t.prioridad || 'BAJA'}</td><td>${t.proyecto || 'General'}</td><td>${infoSla.tiempoEsperaTexto}</td><td>${infoSla.textoTiempo}</td><td>${infoSla.horasLimite}h</td><td>${formatearFechaVisual(t.fechaEntrega) || 'Sin fecha'}</td><td>${t.estado || ''}</td><td>${parsearFecha(t.fecha_recibido)?.toLocaleString() || ''}</td><td>${t.creador?.nombre || t.creador?.email || ''}</td><td>${t.asignado?.nombre || t.asignado?.email || ''}</td>
       </tr>
     `
   })
@@ -423,7 +425,7 @@ const descargarReportePdf = () => {
     itemsHtml += `
       <div style="margin-bottom: 15px; border-bottom: 1px solid #ccc; padding-bottom: 10px;">
         <strong>#${index + 1} ${folio} - ${t.titulo}</strong> (${t.estado})<br>
-        <small>De: ${t.creador?.nombre || 'Mesa'} | Para: ${t.asignado?.nombre || 'Sin asignar'} | Espera: ${infoSla.tiempoEsperaTexto} | Atención Real: ${infoSla.textoTiempo} (SLA: ${infoSla.horasLimite}h)</small>
+        <small>De: ${t.creador?.nombre || 'Mesa'} | Para: ${t.asignado?.nombre || 'Sin asignar'} | Límite: ${formatearFechaVisual(t.fechaEntrega) || 'N/A'} | Atención Real: ${infoSla.textoTiempo} (SLA: ${infoSla.horasLimite}h)</small>
         <p style="margin: 5px 0;">${t.descripcion}</p>
       </div>
     `
@@ -443,7 +445,6 @@ const manejarEnviarTicket = async () => {
   subiendoArchivos.value = true
 
   try {
-    // 1. Subir archivos a Cloudinary y recolectar sus URLs
     const urlsCloudinary = await Promise.all(
       listaArchivosRaw.value.map(file => subirACloudinary(file))
     )
@@ -451,7 +452,6 @@ const manejarEnviarTicket = async () => {
 
     const listaCorreos = correoDestinatario.value.split(',').map(c => c.trim()).filter(c => c.length > 0)
 
-    // 2. Enviar la mutación GraphQL con las URLs generadas
     await apiCrear({ 
       titulo: asuntoTicket.value, 
       descripcion: cuerpoTicket.value,
@@ -459,7 +459,8 @@ const manejarEnviarTicket = async () => {
       archivos: urlsValidas,
       prioridad: prioridadTicket.value,
       proyecto: proyectoTicket.value || null,
-      horasEstimadas: Number(horasObjetivoTicket.value) || 10
+      horasEstimadas: Number(horasObjetivoTicket.value) || 10,
+      fechaEntrega: fechaEntregaEsperada.value || null
     })
     alert('📧 Requerimiento despachado con éxito.')
     limpiarFormularioCompleto()
@@ -471,7 +472,6 @@ const manejarEnviarTicket = async () => {
   }
 }
 
-// 🎯 BÚSQUEDA Y FILTRADO (SOLO ADMINS VEN TODOS LOS TICKETS EN VALIDACIÓN)
 const ticketsFiltradosConPrivacidad = computed(() => {
   const tickets = result.value?.misTickets || []
   const miIdPrisma = result.value?.me?.id || ''
@@ -487,7 +487,6 @@ const ticketsFiltradosConPrivacidad = computed(() => {
     const esCreadorNombre = miNombre && t.creador?.nombre?.toLowerCase() === miNombre
     const esAsignadoNombre = miNombre && t.asignado?.nombre?.toLowerCase() === miNombre
     
-    // 🎯 Únicamente los administradores ven todos los tickets en la pestaña de Validación
     const esEnValidacionAdmin = soyAdmin && t.estado === 'COMPLETADO'
 
     return esCreadorId || esAsignadoId || esCreadorEmail || esAsignadoEmail || esCreadorNombre || esAsignadoNombre || esEnValidacionAdmin
@@ -668,6 +667,10 @@ const cerrarWorkspace = () => {
                       <span class="font-bold">⏱️ Tiempo de atención real (SLA {{ obtenerResumenTiempoSla(ticketActivoWorkspace).horasLimite }}h):</span>
                       <span class="font-mono font-black">{{ obtenerResumenTiempoSla(ticketActivoWorkspace).textoTiempo }}</span>
                     </div>
+                    <div v-if="ticketActivoWorkspace.fechaEntrega" class="flex justify-between items-center text-xs border-t pt-1" :class="esModoOscuro ? 'border-zinc-800' : 'border-slate-200'">
+                      <span class="font-bold">🎯 Fecha Límite Esperada:</span>
+                      <span class="font-mono font-black text-amber-400">{{ formatearFechaVisual(ticketActivoWorkspace.fechaEntrega) }}</span>
+                    </div>
                   </div>
 
                   <div>
@@ -768,7 +771,8 @@ const cerrarWorkspace = () => {
                 </div>
               </div>
 
-              <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 border-b pb-3" :class="esModoOscuro ? 'border-zinc-800' : 'border-slate-200'">
+              <!-- CONTROLES DE CONFIGURACIÓN -->
+              <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 border-b pb-3" :class="esModoOscuro ? 'border-zinc-800' : 'border-slate-200'">
                 <div class="flex items-center">
                   <label class="w-16 text-xs font-bold uppercase" :class="esModoOscuro ? 'text-zinc-400' : 'text-slate-500'">Prioridad:</label>
                   <select v-model="prioridadTicket" :class="esModoOscuro ? 'bg-zinc-950 border-zinc-800 text-white' : 'bg-slate-100 border-slate-300 text-slate-800'" class="flex-1 text-xs p-2.5 rounded-xl border focus:outline-none font-bold cursor-pointer">
@@ -791,6 +795,12 @@ const cerrarWorkspace = () => {
                   <label class="w-20 text-xs font-bold uppercase" :class="esModoOscuro ? 'text-zinc-400' : 'text-slate-500'">Horas SLA:</label>
                   <input v-model.number="horasObjetivoTicket" type="number" min="1" max="500" :class="esModoOscuro ? 'bg-zinc-950 border-zinc-800 text-white' : 'bg-slate-100 border-slate-300 text-slate-800'" class="flex-1 text-xs p-2.5 rounded-xl border focus:outline-none font-bold" placeholder="Ej. 10" />
                 </div>
+
+                <!-- 📅 CAMPO DE FECHA LÍMITE / ENTREGA ESPERADA -->
+                <div class="flex items-center">
+                  <label class="w-20 text-xs font-bold uppercase" :class="esModoOscuro ? 'text-zinc-400' : 'text-slate-500'">Límite:</label>
+                  <input v-model="fechaEntregaEsperada" type="date" :class="esModoOscuro ? 'bg-zinc-950 border-zinc-800 text-white' : 'bg-slate-100 border-slate-300 text-slate-800'" class="flex-1 text-xs p-2.5 rounded-xl border focus:outline-none font-bold cursor-pointer" />
+                </div>
               </div>
 
               <div class="flex flex-col sm:flex-row sm:items-center border-b pb-2 gap-2" :class="esModoOscuro ? 'border-zinc-800' : 'border-slate-200'">
@@ -809,7 +819,7 @@ const cerrarWorkspace = () => {
                 </div>
               </div>
 
-              <!-- 📎 SOLO BOTÓN DE CLIP PARA ADJUNTAR ARCHIVOS -->
+              <!-- 📎 ADJUNTAR ARCHIVOS -->
               <div class="flex items-center gap-2 border-b pb-3" :class="esModoOscuro ? 'border-zinc-800' : 'border-slate-200'">
                 <input type="file" ref="fileInputRef" multiple accept="*" @change="manejarSubidaArchivosMultiples" class="hidden" />
                 <button type="button" @click="abrirSelectorArchivos" class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-bold transition cursor-pointer">
@@ -873,6 +883,11 @@ const cerrarWorkspace = () => {
                   <span class="bg-zinc-950/60 border border-zinc-800 text-zinc-400 px-2 py-0.5 rounded-md text-[10px] font-bold" title="Fecha y hora de creación">
                     📅 Creado: {{ parsearFecha(ticket.fecha_recibido)?.toLocaleString([], { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) || 'Sin fecha' }}
                   </span>
+
+                  <!-- FECHA LÍMITE SI FUE DEFINIDA -->
+                  <span v-if="ticket.fechaEntrega" class="bg-amber-950/60 border border-amber-800 text-amber-400 px-2 py-0.5 rounded-md text-[10px] font-bold" title="Fecha límite de entrega esperada">
+                    🎯 Límite: {{ formatearFechaVisual(ticket.fechaEntrega) }}
+                  </span>
                   
                   <select :value="ticket.prioridad || 'BAJA'" @change="(e) => ejecutarCambioPrioridad(ticket.id, (e.target as HTMLSelectElement).value)" :class="obtenerColorPrioridad(ticket.prioridad)" class="px-2 py-0.5 rounded-md text-[10px] font-bold uppercase cursor-pointer border">
                     <option value="BAJA">🟢 BAJA</option>
@@ -897,7 +912,6 @@ const cerrarWorkspace = () => {
                   <span v-if="ticket.devoluciones > 0" class="bg-red-500/10 border border-red-500/30 text-red-500 px-2 py-0.5 rounded-md text-[10px] font-bold">⚠️ {{ ticket.devoluciones }} Devolución(es)</span>
                 </div>
 
-                <!-- BOTÓN '✕' PARA DESPLEGAR MODAL DE ELIMINACIÓN -->
                 <button 
                   @click.stop="abrirModalEliminar(ticket)" 
                   class="absolute top-4 right-4 sm:static text-orange-500 hover:text-red-500 hover:bg-red-500/10 font-black text-xl w-8 h-8 rounded-xl flex items-center justify-center transition cursor-pointer"

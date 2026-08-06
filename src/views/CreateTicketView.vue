@@ -14,6 +14,7 @@ const prioridadTicket = ref('BAJA')
 const proyectoTicket = ref('')
 const asuntoTicket = ref('')
 const cuerpoTicket = ref('')
+const fechaEntregaEsperada = ref('')
 const listaArchivosRaw = ref<File[]>([])
 const fileInputRef = ref<HTMLInputElement | null>(null)
 const subiendoArchivos = ref(false)
@@ -125,14 +126,15 @@ const descartarTodo = () => {
   correoDestinatario.value = ''
   proyectoTicket.value = ''
   prioridadTicket.value = 'BAJA'
+  fechaEntregaEsperada.value = ''
   listaArchivosRaw.value = []
   if (fileInputRef.value) fileInputRef.value.value = ''
   router.push('/tickets')
 }
 
 const CREAR_TICKET_MUTATION = gql`
-  mutation NuevoTicket($titulo: String!, $descripcion: String!, $asignadosEmails: [String], $archivos: [String], $prioridad: String, $proyecto: String) {
-    crearTicket(titulo: $titulo, descripcion: $descripcion, asignadosEmails: $asignadosEmails, archivos: $archivos, prioridad: $prioridad, proyecto: $proyecto) { id }
+  mutation NuevoTicket($titulo: String!, $descripcion: String!, $asignadosEmails: [String], $archivos: [String], $prioridad: String, $proyecto: String, $fechaEntrega: String) {
+    crearTicket(titulo: $titulo, descripcion: $descripcion, asignadosEmails: $asignadosEmails, archivos: $archivos, prioridad: $prioridad, proyecto: $proyecto, fechaEntrega: $fechaEntrega) { id }
   }
 `
 const { mutate: crearTicket } = useMutation(CREAR_TICKET_MUTATION)
@@ -143,7 +145,6 @@ const manejarEnviarTicket = async () => {
   subiendoArchivos.value = true
 
   try {
-    // 1. Subir todos los archivos a Cloudinary en paralelo y obtener sus URLs
     const urlsCloudinary = await Promise.all(
       listaArchivosRaw.value.map(file => subirACloudinary(file))
     )
@@ -151,14 +152,14 @@ const manejarEnviarTicket = async () => {
 
     const listaCorreos = correoDestinatario.value.split(',').map(c => c.trim()).filter(c => c.length > 0)
 
-    // 2. Enviar la mutación con las URLs
     await crearTicket({ 
       titulo: asuntoTicket.value, 
       descripcion: cuerpoTicket.value,
       asignadosEmails: listaCorreos,
       archivos: urlsValidas,
       prioridad: prioridadTicket.value,
-      proyecto: proyectoTicket.value || null
+      proyecto: proyectoTicket.value || null,
+      fechaEntrega: fechaEntregaEsperada.value || null
     })
     
     alert('📧 Requerimiento generado y despachado con éxito.')
@@ -210,7 +211,7 @@ const manejarEnviarTicket = async () => {
               </div>
             </div>
 
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 border-b pb-3 border-zinc-800">
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 border-b pb-3 border-zinc-800">
               <div class="flex items-center">
                 <label class="w-20 text-xs font-bold text-slate-400 uppercase tracking-wider">Prioridad:</label>
                 <select v-model="prioridadTicket" class="flex-1 text-xs p-2.5 rounded-xl border focus:outline-none cursor-pointer font-bold bg-zinc-950 border-zinc-800 text-white">
@@ -231,6 +232,12 @@ const manejarEnviarTicket = async () => {
                   </option>
                 </select>
               </div>
+
+              <!-- 📅 CAMPO FECHA LÍMITE DE ENTREGA -->
+              <div class="flex items-center">
+                <label class="w-20 text-xs font-bold text-slate-400 uppercase tracking-wider">Límite:</label>
+                <input v-model="fechaEntregaEsperada" type="date" class="flex-1 text-xs p-2.5 rounded-xl border focus:outline-none cursor-pointer font-bold bg-zinc-950 border-zinc-800 text-white" />
+              </div>
             </div>
 
             <div class="flex items-center border-b pb-2 border-zinc-800">
@@ -238,7 +245,6 @@ const manejarEnviarTicket = async () => {
               <input v-model="asuntoTicket" type="text" required class="w-full text-sm font-bold focus:outline-none bg-transparent text-white" placeholder="Título del hito o incidencia a resolver..." />
             </div>
 
-            <!-- 📎 BOTÓN DE ADJUNTAR ARCHIVOS -->
             <div class="flex items-center gap-2 border-b pb-3 border-zinc-800">
               <input type="file" ref="fileInputRef" multiple accept="*" @change="manejarSubidaArchivosMultiples" class="hidden" />
               <button type="button" @click="abrirSelectorArchivos" class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-bold transition cursor-pointer">
