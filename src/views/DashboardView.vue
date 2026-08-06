@@ -610,7 +610,7 @@ const cerrarWorkspace = () => {
         <main class="p-4 sm:p-8 space-y-6 sm:space-y-8 w-full max-w-7xl mx-auto pb-24">
           
           <!-- VENTANA FLOTANTE CENTRADA PARA BORRAR TICKET -->
-          <div v-if="mostrarModalEliminar" class="fixed inset-0 bg-zinc-950/80 backdrop-blur-md z-[100] flex items-center justify-center p-4">
+          <div v-if="mostrarModalEliminar" class="fixed inset-0 bg-zinc-950/80 backdrop-blur-md z-100 flex items-center justify-center p-4">
             <div :class="esModoOscuro ? 'bg-zinc-900 border-zinc-800 text-white' : 'bg-white border-slate-200 text-slate-800'" class="border rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl text-center space-y-6">
               <div class="w-16 h-16 bg-red-500/10 border border-red-500/30 rounded-2xl flex items-center justify-center mx-auto text-3xl">
                 ⚠️
