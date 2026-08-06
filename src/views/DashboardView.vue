@@ -313,7 +313,7 @@ const { mutate: apiChat } = useMutation(ENVIAR_MENSAJE_CHAT)
 const { mutate: apiCambiarPrioridad } = useMutation(CAMBIAR_PRIORIDAD_MUTATION)
 const { mutate: apiEliminarTicket } = useMutation(ELIMINAR_TICKET_MUTATION)
 
-const esAdmin = computed(() => result.value?.me?.rol === 'ADMIN')
+const esAdmin = computed(() => ['ADMIN', 'OWNER', 'JEFE'].includes(result.value?.me?.rol))
 
 const abrirModalEliminar = (ticket: any) => {
   ticketAEliminar.value = ticket
