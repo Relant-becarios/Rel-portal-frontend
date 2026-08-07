@@ -111,7 +111,7 @@ const SOLICITAR_VEHICULO_MUTATION = gql`
 
 const FINALIZAR_PRESTAMO_MUTATION = gql`
   mutation FinalizarPrestamo($prestamoId: String!, $kilometrajeFinal: Int!, $fotoKilometrajeFin: String, $observaciones: String) {
-    finalizarPrestamoVehiculo(prestamoId: $prestamoId, kilometrajeFinal: $kilometrajeFinal, fotoKilometrajeFin: $fotoKilometrajeFin, observaciones: $observaciones) { id }
+    finalizarPrestamoVehiculo(prestamoId: $prestamoId, kilometrajeFinal: $kilometrajeFinal, fotoKilometrajeFin: $fotoKilometrajeFin, observations: $observaciones) { id }
   }
 `
 
@@ -147,28 +147,46 @@ const seleccionarFotoFin = (event: Event) => {
   if (target.files && target.files[0]) archivoFotoKmFin.value = target.files[0]
 }
 
+// 🔒 VALIDACIÓN STRICTA DEL FORMULARIO
 const enviarSolicitud = async () => {
-  if (!vehiculoSeleccionadoId.value || !justificacionUso.value || !fechaRecepcion.value || !fechaEntregaEstimada.value) {
-    alert('❌ Selecciona el vehículo, ingresa la justificación y las fechas.')
+  if (!vehiculoSeleccionadoId.value) {
+    alert('❌ Debes seleccionar un vehículo de la lista.')
+    return
+  }
+  if (!justificacionUso.value.trim()) {
+    alert('❌ Debes ingresar la justificación / motivo de uso.')
+    return
+  }
+  if (!fechaRecepcion.value) {
+    alert('❌ Selecciona la fecha y hora de salida.')
+    return
+  }
+  if (!fechaEntregaEstimada.value) {
+    alert('❌ Selecciona la fecha y hora estimada de entrega.')
+    return
+  }
+  if (numPersonas.value === 1 && llevaMaterial.value && !detalleMaterial.value.trim()) {
+    alert('❌ Especifica qué material o carga vas a transportar.')
+    return
+  }
+  if (!archivoFotoKmIni.value) {
+    alert('❌ Es obligatorio adjuntar la foto del odómetro / kilometraje inicial.')
     return
   }
 
   guardandoSolicitud.value = true
   try {
-    let urlFotoKm = ''
-    if (archivoFotoKmIni.value) {
-      urlFotoKm = await subirACloudinary(archivoFotoKmIni.value)
-    }
+    const urlFotoKm = await subirACloudinary(archivoFotoKmIni.value)
 
     await apiSolicitar({
       vehiculoId: vehiculoSeleccionadoId.value,
-      justificacion: justificacionUso.value,
+      justificacion: justificacionUso.value.trim(),
       numPersonas: Number(numPersonas.value),
       llevaMaterial: numPersonas.value === 1 ? llevaMaterial.value : false,
-      detalleMaterial: (numPersonas.value === 1 && llevaMaterial.value) ? detalleMaterial.value : null,
+      detalleMaterial: (numPersonas.value === 1 && llevaMaterial.value) ? detalleMaterial.value.trim() : null,
       fechaRecepcion: fechaRecepcion.value,
       fechaEntregaEstimada: fechaEntregaEstimada.value,
-      fotoKilometrajeIni: urlFotoKm || null,
+      fotoKilometrajeIni: urlFotoKm,
       comentarios: comentariosOpcionales.value.trim() || null
     })
 
@@ -180,6 +198,8 @@ const enviarSolicitud = async () => {
     numPersonas.value = 1
     llevaMaterial.value = false
     archivoFotoKmIni.value = null
+    fechaRecepcion.value = ''
+    fechaEntregaEstimada.value = ''
     refetch()
   } catch (err: any) {
     alert('Error al registrar auto: ' + err.message)
@@ -193,19 +213,20 @@ const procesarDevolucion = async () => {
     alert('❌ Ingresa el kilometraje final.')
     return
   }
+  if (!archivoFotoKmFin.value) {
+    alert('❌ Es obligatorio adjuntar la foto del odómetro final.')
+    return
+  }
 
   subiendoDevolucion.value = true
   try {
-    let urlFotoFin = ''
-    if (archivoFotoKmFin.value) {
-      urlFotoFin = await subirACloudinary(archivoFotoKmFin.value)
-    }
+    const urlFotoFin = await subirACloudinary(archivoFotoKmFin.value)
 
     await apiFinalizar({
       prestamoId: prestamoADevolver.value.id,
       kilometrajeFinal: Number(kmFinalDevolucion.value),
-      fotoKilometrajeFin: urlFotoFin || null,
-      observaciones: observacionesDevolucion.value
+      fotoKilometrajeFin: urlFotoFin,
+      observaciones: observacionesDevolucion.value.trim() || null
     })
 
     alert('🏁 Devolución registrada y validada.')
@@ -224,7 +245,7 @@ const procesarDevolucion = async () => {
 const emitirReporteManual = async () => {
   try {
     await apiEnviarReporteSemanal()
-    alert('📧 Reporte semanal despachado a fibanez@relant.com.mx y admon@relant.com.mx')
+    alert('📧 Reporte semanal despachado a eder.chavezx34@gmail.com')
   } catch (e: any) {
     alert('Error enviando reporte: ' + e.message)
   }
@@ -254,7 +275,7 @@ onMounted(() => {
 
       <main class="flex-1 overflow-y-auto p-6 space-y-8 max-w-7xl mx-auto w-full pb-24">
         
-        <!-- 🚗 CATÁLOGO Y ESPECIFICACIONES DE VEHÍCULOS -->
+        <!-- 🚗 CATÁLOGO DE VEHÍCULOS CON FOTOS -->
         <section class="space-y-4 text-left">
           <h3 class="text-xs font-black uppercase tracking-wider text-zinc-400">🚗 Autos Registrados y Especificaciones</h3>
           
@@ -270,7 +291,6 @@ onMounted(() => {
               class="rounded-2xl border p-5 space-y-3 cursor-pointer transition-all hover:scale-[1.01]"
               @click="vehiculoSeleccionadoId = v.id"
             >
-              <!-- 🖼️ FOTO DEL VEHÍCULO DE CLOUDINARY -->
               <div v-if="v.fotoUrl" class="w-full h-36 rounded-xl overflow-hidden bg-white/5 flex items-center justify-center p-2 border border-zinc-800/50">
                 <img :src="v.fotoUrl" :alt="v.nombre" class="h-full object-contain hover:scale-105 transition-transform" />
               </div>
@@ -292,7 +312,6 @@ onMounted(() => {
                 </span>
               </div>
 
-              <!-- ESPECIFICACIONES TÉCNICAS -->
               <p v-if="v.especificaciones" class="text-[11px] text-zinc-400 bg-zinc-950/40 p-2 rounded-xl border border-zinc-800/50">
                 ⚙️ {{ v.especificaciones }}
               </p>
@@ -304,7 +323,7 @@ onMounted(() => {
                 </div>
                 <div>
                   <span class="text-[9px] text-zinc-500 uppercase block">Kilometraje</span>
-                  <span class="font-bold">MW {{ v.kilometrajeActual.toLocaleString() }} km</span>
+                  <span class="font-bold">🛣️ {{ v.kilometrajeActual.toLocaleString() }} km</span>
                 </div>
                 <div class="col-span-2 pt-1">
                   <span class="text-[9px] text-zinc-500 uppercase block">Verificación Vehicular</span>
@@ -315,17 +334,15 @@ onMounted(() => {
           </div>
         </section>
 
-        <!-- 📝 FORMULARIO CON SELECCIÓN MÚLTIPLE Y JUSTIFICACIÓN -->
+        <!-- 📝 FORMULARIO DE SOLICITUD -->
         <section :class="esModoOscuro ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-slate-200 shadow-sm'" class="rounded-3xl border overflow-hidden text-left">
           <div class="bg-red-700 p-4 text-white">
             <h3 class="text-xs font-black uppercase tracking-wider">Formulario Diario de Salida / Uso de Auto</h3>
           </div>
 
           <form @submit.prevent="enviarSolicitud" class="p-6 space-y-5">
-            
-            <!-- SELECCIÓN MÚLTIPLE TIPO BURBUJAS/EXAMEN DE VEHÍCULO -->
             <div>
-              <label class="text-xs font-bold uppercase text-zinc-400 block mb-2">1. Selecciona el auto a utilizar (Opción Múltiple):</label>
+              <label class="text-xs font-bold uppercase text-zinc-400 block mb-2">1. Selecciona el auto a utilizar (Requerido): *</label>
               <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
                 <label 
                   v-for="v in vehiculos.filter((item: any) => item.estado === 'DISPONIBLE')" 
@@ -335,7 +352,7 @@ onMounted(() => {
                   ]"
                   class="flex items-center gap-3 p-3 rounded-2xl border cursor-pointer transition-all"
                 >
-                  <input type="radio" v-model="vehiculoSeleccionadoId" :value="v.id" name="auto_opcion" class="accent-red-600 w-4 h-4" />
+                  <input type="radio" v-model="vehiculoSeleccionadoId" :value="v.id" name="auto_opcion" required class="accent-red-600 w-4 h-4" />
                   <div class="text-xs">
                     <span class="font-bold block text-white">{{ v.nombre }}</span>
                     <span class="font-mono text-[10px]">Capacidad: {{ v.capacidadPersonas }} pers.</span>
@@ -345,20 +362,17 @@ onMounted(() => {
             </div>
 
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <!-- JUSTIFICACIÓN DE USO -->
               <div>
-                <label class="text-xs font-bold uppercase text-zinc-400 block mb-1">2. Justificación / Motivo de uso:</label>
+                <label class="text-xs font-bold uppercase text-zinc-400 block mb-1">2. Justificación / Motivo de uso: *</label>
                 <input v-model="justificacionUso" type="text" required placeholder="Ej. Traslado a Planta Toluca para auditoría técnica" :class="esModoOscuro ? 'bg-zinc-950 border-zinc-800 text-white' : 'bg-slate-100 border-slate-300 text-slate-900'" class="w-full p-3 text-xs rounded-xl border focus:outline-none" />
               </div>
 
-              <!-- PASAJEROS -->
               <div>
-                <label class="text-xs font-bold uppercase text-zinc-400 block mb-1">3. ¿Para cuántas personas será el vehículo?:</label>
+                <label class="text-xs font-bold uppercase text-zinc-400 block mb-1">3. ¿Para cuántas personas será el vehículo?: *</label>
                 <input v-model.number="numPersonas" type="number" min="1" :max="vehiculoSeleccionadoObj?.capacidadPersonas || 10" required :class="esModoOscuro ? 'bg-zinc-950 border-zinc-800 text-white' : 'bg-slate-100 border-slate-300 text-slate-900'" class="w-full p-3 text-xs rounded-xl border focus:outline-none font-bold" />
               </div>
             </div>
 
-            <!-- SI ES 1 SOLA PERSONA -->
             <div v-if="numPersonas === 1" class="p-4 rounded-2xl bg-zinc-950/60 border border-zinc-800/80 space-y-3">
               <div class="flex items-center gap-3">
                 <input v-model="llevaMaterial" type="checkbox" id="checkMaterial" class="w-4 h-4 accent-red-600 rounded cursor-pointer" />
@@ -366,33 +380,31 @@ onMounted(() => {
               </div>
 
               <div v-if="llevaMaterial">
-                <label class="text-[10px] font-bold uppercase text-zinc-400 block mb-1">Especificación de material/herramientas:</label>
-                <input v-model="detalleMaterial" type="text" placeholder="Ej. 2 cajas de herramientas, bobinas de cable" :class="esModoOscuro ? 'bg-zinc-900 border-zinc-800 text-white' : 'bg-white border-slate-300 text-slate-800'" class="w-full p-2.5 text-xs rounded-xl border focus:outline-none" />
+                <label class="text-[10px] font-bold uppercase text-zinc-400 block mb-1">Especificación de material/herramientas: *</label>
+                <input v-model="detalleMaterial" type="text" required placeholder="Ej. 2 cajas de herramientas, bobinas de cable" :class="esModoOscuro ? 'bg-zinc-900 border-zinc-800 text-white' : 'bg-white border-slate-300 text-slate-800'" class="w-full p-2.5 text-xs rounded-xl border focus:outline-none" />
               </div>
             </div>
 
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label class="text-xs font-bold uppercase text-zinc-400 block mb-1">Fecha / Hora Salida:</label>
+                <label class="text-xs font-bold uppercase text-zinc-400 block mb-1">Fecha / Hora Salida: *</label>
                 <input v-model="fechaRecepcion" type="datetime-local" required :class="esModoOscuro ? 'bg-zinc-950 border-zinc-800 text-white' : 'bg-slate-100 border-slate-300 text-slate-900'" class="w-full p-3 text-xs rounded-xl border focus:outline-none font-mono" />
               </div>
 
               <div>
-                <label class="text-xs font-bold uppercase text-zinc-400 block mb-1">Fecha / Hora Estimada Entrega:</label>
+                <label class="text-xs font-bold uppercase text-zinc-400 block mb-1">Fecha / Hora Estimada Entrega: *</label>
                 <input v-model="fechaEntregaEstimada" type="datetime-local" required :class="esModoOscuro ? 'bg-zinc-950 border-zinc-800 text-white' : 'bg-slate-100 border-slate-300 text-slate-900'" class="w-full p-3 text-xs rounded-xl border focus:outline-none font-mono" />
               </div>
             </div>
 
-            <!-- FOTO DEL KILOMETRAJE ODÓMETRO INICIAL -->
             <div>
-              <label class="text-xs font-bold uppercase text-zinc-400 block mb-1">📷 Foto del Odómetro / Kilometraje Inicial:</label>
+              <label class="text-xs font-bold uppercase text-zinc-400 block mb-1">📷 Foto del Odómetro / Kilometraje Inicial: *</label>
               <input type="file" ref="inputKmIniRef" accept="image/*" class="hidden" @change="seleccionarFotoIni" />
-              <button type="button" @click="inputKmIniRef?.click()" class="bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-bold px-4 py-2 rounded-xl cursor-pointer">
-                {{ archivoFotoKmIni ? `📷 Foto cargada: ${archivoFotoKmIni.name}` : '📷 Capturar/Adjuntar Foto del Odómetro' }}
+              <button type="button" @click="inputKmIniRef?.click()" :class="archivoFotoKmIni ? 'bg-emerald-800/80 border-emerald-600 text-white' : 'bg-zinc-800 hover:bg-zinc-700 text-white'" class="text-xs font-bold px-4 py-2.5 rounded-xl cursor-pointer border transition-all">
+                {{ archivoFotoKmIni ? `✅ Foto lista: ${archivoFotoKmIni.name}` : '📷 Capturar/Adjuntar Foto del Odómetro (Obligatorio)' }}
               </button>
             </div>
 
-            <!-- COMENTARIOS OPCIONALES -->
             <div>
               <label class="text-xs font-bold uppercase text-zinc-400 block mb-1">💬 Comentarios Adicionales (Opcional):</label>
               <textarea v-model="comentariosOpcionales" rows="2" placeholder="Cualquier detalle extra que quieras añadir..." :class="esModoOscuro ? 'bg-zinc-950 border-zinc-800 text-white' : 'bg-slate-100 border-slate-300 text-slate-900'" class="w-full p-3 text-xs rounded-xl border focus:outline-none"></textarea>
@@ -406,7 +418,7 @@ onMounted(() => {
           </form>
         </section>
 
-        <!-- 📋 BITÁCORA DE USO -->
+        <!-- 📋 BITÁCORA DE USO (MUESTRA LAS 2 FOTOS) -->
         <section class="space-y-4 text-left">
           <h3 class="text-xs font-black uppercase tracking-wider text-zinc-400">📋 Bitácora de Registro y Devolución</h3>
 
@@ -424,12 +436,18 @@ onMounted(() => {
                 <div v-if="p.comentarios" class="text-[11px] italic text-zinc-400 pt-0.5">
                   💬 Comentario: {{ p.comentarios }}
                 </div>
-                <div v-if="p.fotoKilometrajeIni" class="pt-1">
-                  <a :href="p.fotoKilometrajeIni" target="_blank" class="text-[10px] font-bold text-red-500 underline">📷 Ver Foto Odómetro Inicial</a>
+
+                <!-- 📷 MIRA AQUÍ LAS 2 FOTOS EN LA BITÁCORA -->
+                <div class="flex flex-wrap gap-2 pt-2 text-[11px] font-bold">
+                  <a v-if="p.fotoKilometrajeIni" :href="p.fotoKilometrajeIni" target="_blank" class="text-red-400 hover:text-red-300 underline flex items-center gap-1 bg-red-950/40 border border-red-800/50 px-2.5 py-1 rounded-lg">
+                    📷 Ver Foto Odómetro Inicial ↗
+                  </a>
+                  <a v-if="p.fotoKilometrajeFin" :href="p.fotoKilometrajeFin" target="_blank" class="text-emerald-400 hover:text-emerald-300 underline flex items-center gap-1 bg-emerald-950/40 border border-emerald-800/50 px-2.5 py-1 rounded-lg">
+                    📷 Ver Foto Odómetro Final ↗
+                  </a>
                 </div>
               </div>
 
-              <!-- REGISTRO DE KILOMETRAJE AL DEVOLVER -->
               <div v-if="p.estado === 'EN_CURSO'" class="shrink-0">
                 <button @click="prestamoADevolver = p" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-5 py-2.5 rounded-xl cursor-pointer">
                   🔑 Registrar Devolución / Foto Km
@@ -448,15 +466,15 @@ onMounted(() => {
           <p class="text-xs text-zinc-400">Ingresa el kilometraje final y sube la foto del tablero.</p>
 
           <div>
-            <label class="text-xs font-bold uppercase text-zinc-400 block mb-1">Kilometraje Final Odómetro:</label>
+            <label class="text-xs font-bold uppercase text-zinc-400 block mb-1">Kilometraje Final Odómetro: *</label>
             <input v-model.number="kmFinalDevolucion" type="number" required placeholder="Ej. 45200" :class="esModoOscuro ? 'bg-zinc-950 border-zinc-800 text-white' : 'bg-slate-100 border-slate-300 text-slate-900'" class="w-full p-3 text-sm rounded-xl border focus:outline-none font-bold font-mono" />
           </div>
 
           <div>
-            <label class="text-xs font-bold uppercase text-zinc-400 block mb-1">📷 Foto del Odómetro Final:</label>
+            <label class="text-xs font-bold uppercase text-zinc-400 block mb-1">📷 Foto del Odómetro Final: *</label>
             <input type="file" ref="inputKmFinRef" accept="image/*" class="hidden" @change="seleccionarFotoFin" />
-            <button type="button" @click="inputKmFinRef?.click()" class="bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-bold px-4 py-2 rounded-xl cursor-pointer w-full">
-              {{ archivoFotoKmFin ? `📷 Foto cargada: ${archivoFotoKmFin.name}` : '📷 Adjuntar Foto del Odómetro Final' }}
+            <button type="button" @click="inputKmFinRef?.click()" :class="archivoFotoKmFin ? 'bg-emerald-800/80 border-emerald-600 text-white' : 'bg-zinc-800 hover:bg-zinc-700 text-white'" class="text-xs font-bold px-4 py-2.5 rounded-xl cursor-pointer w-full border transition-all">
+              {{ archivoFotoKmFin ? `✅ Foto cargada: ${archivoFotoKmFin.name}` : '📷 Adjuntar Foto del Odómetro Final (Obligatorio)' }}
             </button>
           </div>
 
@@ -474,7 +492,6 @@ onMounted(() => {
         </div>
       </div>
 
-      <!-- ☀️/🌙 BOTÓN FLOTANTE -->
       <button 
         @click="toggleTema" 
         :class="esModoOscuro ? 'bg-zinc-900 border-zinc-700 text-white hover:bg-zinc-800' : 'bg-white border-slate-300 text-slate-800 hover:bg-slate-100'"
