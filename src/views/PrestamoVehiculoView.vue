@@ -270,6 +270,11 @@ onMounted(() => {
               class="rounded-2xl border p-5 space-y-3 cursor-pointer transition-all hover:scale-[1.01]"
               @click="vehiculoSeleccionadoId = v.id"
             >
+              <!-- 🖼️ FOTO DEL VEHÍCULO DE CLOUDINARY -->
+              <div v-if="v.fotoUrl" class="w-full h-36 rounded-xl overflow-hidden bg-white/5 flex items-center justify-center p-2 border border-zinc-800/50">
+                <img :src="v.fotoUrl" :alt="v.nombre" class="h-full object-contain hover:scale-105 transition-transform" />
+              </div>
+
               <div class="flex justify-between items-start">
                 <div>
                   <h4 class="font-black text-base">{{ v.nombre }}</h4>
@@ -299,7 +304,7 @@ onMounted(() => {
                 </div>
                 <div>
                   <span class="text-[9px] text-zinc-500 uppercase block">Kilometraje</span>
-                  <span class="font-bold">🛣️ {{ v.kilometrajeActual.toLocaleString() }} km</span>
+                  <span class="font-bold">MW {{ v.kilometrajeActual.toLocaleString() }} km</span>
                 </div>
                 <div class="col-span-2 pt-1">
                   <span class="text-[9px] text-zinc-500 uppercase block">Verificación Vehicular</span>
