@@ -25,6 +25,13 @@ const archivoFotoKmFin = ref<File | null>(null)
 const observacionesDevolucion = ref('')
 const subiendoDevolucion = ref(false)
 
+// Modal de Configuración de Mantenimiento (ADMIN/OWNER/JEFE)
+const vehiculoAConfigurar = ref<any | null>(null)
+const configEstado = ref('DISPONIBLE')
+const configLimiteKm = ref(10000)
+const configUltimoServicioKm = ref(0)
+const guardandoConfig = ref(false)
+
 const inputKmIniRef = ref<HTMLInputElement | null>(null)
 const inputKmFinRef = ref<HTMLInputElement | null>(null)
 
@@ -51,6 +58,10 @@ const subirACloudinary = async (file: File): Promise<string> => {
 // GRAPHQL
 const OBTENER_DATOS_VEHICULOS = gql`
   query GetDatosVehiculos {
+    me {
+      id
+      rol
+    }
     obtenerVehiculos {
       id
       nombre
@@ -58,6 +69,7 @@ const OBTENER_DATOS_VEHICULOS = gql`
       capacidadPersonas
       kilometrajeActual
       ultimoServicioKm
+      limiteKmMantenimiento
       fechaVerificacion
       especificaciones
       estado
@@ -111,7 +123,27 @@ const SOLICITAR_VEHICULO_MUTATION = gql`
 
 const FINALIZAR_PRESTAMO_MUTATION = gql`
   mutation FinalizarPrestamo($prestamoId: String!, $kilometrajeFinal: Int!, $fotoKilometrajeFin: String, $observaciones: String) {
-    finalizarPrestamoVehiculo(prestamoId: $prestamoId, kilometrajeFinal: $kilometrajeFinal, fotoKilometrajeFin: $fotoKilometrajeFin, observations: $observaciones) { id }
+    finalizarPrestamoVehiculo(prestamoId: $prestamoId, kilometrajeFinal: $kilometrajeFinal, fotoKilometrajeFin: $fotoKilometrajeFin, observaciones: $observaciones) { id }
+  }
+`
+
+const CAMBIAR_ESTADO_MUTATION = gql`
+  mutation CambiarEstadoVehiculo($vehiculoId: String!, $nuevoEstado: EstadoVehiculo!) {
+    cambiarEstadoVehiculo(vehiculoId: $vehiculoId, nuevoEstado: $nuevoEstado) {
+      id
+      estado
+    }
+  }
+`
+
+const CONFIGURAR_MANTENIMIENTO_MUTATION = gql`
+  mutation ConfigurarMantenimientoVehiculo($vehiculoId: String!, $limiteKmMantenimiento: Int, $ultimoServicioKm: Int, $estado: EstadoVehiculo) {
+    configurarMantenimientoVehiculo(vehiculoId: $vehiculoId, limiteKmMantenimiento: $limiteKmMantenimiento, ultimoServicioKm: $ultimoServicioKm, estado: $estado) {
+      id
+      estado
+      limiteKmMantenimiento
+      ultimoServicioKm
+    }
   }
 `
 
@@ -128,10 +160,18 @@ const { result, loading, refetch } = useQuery(OBTENER_DATOS_VEHICULOS, null, {
 
 const { mutate: apiSolicitar } = useMutation(SOLICITAR_VEHICULO_MUTATION)
 const { mutate: apiFinalizar } = useMutation(FINALIZAR_PRESTAMO_MUTATION)
+const { mutate: apiCambiarEstado } = useMutation(CAMBIAR_ESTADO_MUTATION)
+const { mutate: apiConfigurarMantenimiento } = useMutation(CONFIGURAR_MANTENIMIENTO_MUTATION)
 const { mutate: apiEnviarReporteSemanal } = useMutation(ENVIAR_REPORTE_SEMANAL)
 
 const vehiculos = computed(() => result.value?.obtenerVehiculos || [])
 const prestamos = computed(() => result.value?.obtenerPrestamosVehiculos || [])
+
+// Validar si el usuario actual es JEFE, ADMIN u OWNER
+const esAdminOJefe = computed(() => {
+  const rol = result.value?.me?.rol
+  return ['ADMIN', 'OWNER', 'JEFE'].includes(rol)
+})
 
 const vehiculoSeleccionadoObj = computed(() => {
   return vehiculos.value.find((v: any) => v.id === vehiculoSeleccionadoId.value)
@@ -147,7 +187,45 @@ const seleccionarFotoFin = (event: Event) => {
   if (target.files && target.files[0]) archivoFotoKmFin.value = target.files[0]
 }
 
-// 🔒 VALIDACIÓN STRICTA DEL FORMULARIO
+const cambiarEstadoManual = async (vehiculoId: string, nuevoEstado: string) => {
+  try {
+    await apiCambiarEstado({ vehiculoId, nuevoEstado })
+    refetch()
+  } catch (err: any) {
+    alert('Error al cambiar el estado: ' + err.message)
+  }
+}
+
+const abrirModalConfiguracion = (vehiculo: any) => {
+  vehiculoAConfigurar.value = vehiculo
+  configEstado.value = vehiculo.estado
+  configLimiteKm.value = vehiculo.limiteKmMantenimiento || 10000
+  configUltimoServicioKm.value = vehiculo.ultimoServicioKm || vehiculo.kilometrajeActual
+}
+
+const guardarConfiguracionMantenimiento = async () => {
+  if (!vehiculoAConfigurar.value) return
+  guardandoConfig.value = true
+
+  try {
+    await apiConfigurarMantenimiento({
+      vehiculoId: vehiculoAConfigurar.value.id,
+      estado: configEstado.value,
+      limiteKmMantenimiento: Number(configLimiteKm.value),
+      ultimoServicioKm: Number(configUltimoServicioKm.value)
+    })
+
+    alert('⚙️ Configuración de mantenimiento actualizada correctamente.')
+    vehiculoAConfigurar.value = null
+    refetch()
+  } catch (err: any) {
+    alert('Error al guardar configuración: ' + err.message)
+  } finally {
+    guardandoConfig.value = false
+  }
+}
+
+// 🔒 VALIDACIÓN ESTRICTA DEL FORMULARIO
 const enviarSolicitud = async () => {
   if (!vehiculoSeleccionadoId.value) {
     alert('❌ Debes seleccionar un vehículo de la lista.')
@@ -300,7 +378,27 @@ onMounted(() => {
                   <h4 class="font-black text-base">{{ v.nombre }}</h4>
                   <span class="text-[10px] font-mono bg-zinc-800 text-zinc-300 px-2 py-0.5 rounded border border-zinc-700">Placas: {{ v.placas }}</span>
                 </div>
+
+                <!-- 🔽 SI ES ADMIN/JEFE/OWNER: MENÚ DESPLEGABLE DE ESTADO -->
+                <select 
+                  v-if="esAdminOJefe"
+                  :value="v.estado"
+                  @click.stop
+                  @change="(e) => cambiarEstadoManual(v.id, (e.target as HTMLSelectElement).value)"
+                  :class="{
+                    'bg-emerald-950/80 text-emerald-400 border-emerald-500/50': v.estado === 'DISPONIBLE',
+                    'bg-amber-950/80 text-amber-400 border-amber-500/50': v.estado === 'EN_USO',
+                    'bg-red-950/80 text-red-400 border-red-500/50': v.estado === 'MANTENIMIENTO'
+                  }"
+                  class="text-[10px] font-bold uppercase px-3 py-1 rounded-lg border cursor-pointer focus:outline-none appearance-none pr-7 relative bg-[url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%23FFFFFF%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E')] bg-[length:9px_9px] bg-[right_8px_center] bg-no-repeat"
+                >
+                  <option value="DISPONIBLE" class="bg-zinc-900 text-emerald-400 font-bold">DISPONIBLE</option>
+                  <option value="EN_USO" class="bg-zinc-900 text-amber-400 font-bold">EN_USO</option>
+                  <option value="MANTENIMIENTO" class="bg-zinc-900 text-red-400 font-bold">MANTENIMIENTO</option>
+                </select>
+
                 <span 
+                  v-else
                   :class="{
                     'bg-emerald-500/20 text-emerald-400 border-emerald-500/30': v.estado === 'DISPONIBLE',
                     'bg-amber-500/20 text-amber-400 border-amber-500/30': v.estado === 'EN_USO',
@@ -325,9 +423,20 @@ onMounted(() => {
                   <span class="text-[9px] text-zinc-500 uppercase block">Kilometraje</span>
                   <span class="font-bold">🛣️ {{ v.kilometrajeActual.toLocaleString() }} km</span>
                 </div>
-                <div class="col-span-2 pt-1">
-                  <span class="text-[9px] text-zinc-500 uppercase block">Verificación Vehicular</span>
-                  <span class="font-bold text-amber-400">📅 {{ v.fechaVerificacion || 'No requiere / Al día' }}</span>
+                <div class="col-span-2 pt-1 flex justify-between items-center">
+                  <div>
+                    <span class="text-[9px] text-zinc-500 uppercase block">Próx. Servicio en</span>
+                    <span class="font-bold text-amber-400">🔧 {{ ((v.ultimoServicioKm + (v.limiteKmMantenimiento || 10000)) - v.kilometrajeActual).toLocaleString() }} km</span>
+                  </div>
+
+                  <!-- ⚙️ BOTÓN DE CONFIGURACIÓN PARA JEFE/ADMIN/OWNER -->
+                  <button 
+                    v-if="esAdminOJefe" 
+                    @click.stop="abrirModalConfiguracion(v)" 
+                    class="bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-bold text-[10px] px-2.5 py-1 rounded-lg border border-zinc-700 transition"
+                  >
+                    ⚙️ Configurar
+                  </button>
                 </div>
               </div>
             </div>
@@ -418,7 +527,7 @@ onMounted(() => {
           </form>
         </section>
 
-        <!-- 📋 BITÁCORA DE USO (MUESTRA LAS 2 FOTOS) -->
+        <!-- 📋 BITÁCORA DE USO -->
         <section class="space-y-4 text-left">
           <h3 class="text-xs font-black uppercase tracking-wider text-zinc-400">📋 Bitácora de Registro y Devolución</h3>
 
@@ -437,7 +546,7 @@ onMounted(() => {
                   💬 Comentario: {{ p.comentarios }}
                 </div>
 
-                <!-- 📷 MIRA AQUÍ LAS 2 FOTOS EN LA BITÁCORA -->
+                <!-- 📷 EVIDENCIAS EN FOTO -->
                 <div class="flex flex-wrap gap-2 pt-2 text-[11px] font-bold">
                   <a v-if="p.fotoKilometrajeIni" :href="p.fotoKilometrajeIni" target="_blank" class="text-red-400 hover:text-red-300 underline flex items-center gap-1 bg-red-950/40 border border-red-800/50 px-2.5 py-1 rounded-lg">
                     📷 Ver Foto Odómetro Inicial ↗
@@ -458,6 +567,41 @@ onMounted(() => {
         </section>
 
       </main>
+
+      <!-- ⚙️ MODAL DE CONFIGURACIÓN DE MANTENIMIENTO -->
+      <div v-if="vehiculoAConfigurar" class="fixed inset-0 bg-zinc-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
+        <div :class="esModoOscuro ? 'bg-zinc-900 border-zinc-800 text-white' : 'bg-white border-slate-200 text-slate-800'" class="border rounded-3xl p-6 max-w-md w-full shadow-2xl space-y-4 text-left">
+          <h3 class="text-lg font-black">⚙️ Ajustes de Mantenimiento: {{ vehiculoAConfigurar.nombre }}</h3>
+
+          <div>
+            <label class="text-xs font-bold uppercase text-zinc-400 block mb-1">Estado del Auto:</label>
+            <select v-model="configEstado" :class="esModoOscuro ? 'bg-zinc-950 border-zinc-800 text-white' : 'bg-slate-100 border-slate-300 text-slate-900'" class="w-full p-3 text-xs rounded-xl border focus:outline-none font-bold">
+              <option value="DISPONIBLE">DISPONIBLE</option>
+              <option value="EN_USO">EN_USO</option>
+              <option value="MANTENIMIENTO">MANTENIMIENTO</option>
+            </select>
+          </div>
+
+          <div>
+            <label class="text-xs font-bold uppercase text-zinc-400 block mb-1">Límite de Kilómetros para Mantenimiento:</label>
+            <input v-model.number="configLimiteKm" type="number" required :class="esModoOscuro ? 'bg-zinc-950 border-zinc-800 text-white' : 'bg-slate-100 border-slate-300 text-slate-900'" class="w-full p-3 text-sm rounded-xl border focus:outline-none font-bold font-mono" />
+            <p class="text-[10px] text-zinc-500 pt-1">Cada cuántos kilómetros recorridos el vehículo se bloqueará automáticamente.</p>
+          </div>
+
+          <div>
+            <label class="text-xs font-bold uppercase text-zinc-400 block mb-1">Kilometraje del Último Servicio Realizado:</label>
+            <input v-model.number="configUltimoServicioKm" type="number" required :class="esModoOscuro ? 'bg-zinc-950 border-zinc-800 text-white' : 'bg-slate-100 border-slate-300 text-slate-900'" class="w-full p-3 text-sm rounded-xl border focus:outline-none font-bold font-mono" />
+            <p class="text-[10px] text-zinc-500 pt-1">Restablece este valor al kilometraje actual tras realizar la afinación o servicio técnico.</p>
+          </div>
+
+          <div class="flex justify-end gap-2 pt-2">
+            <button @click="vehiculoAConfigurar = null" class="bg-zinc-800 text-zinc-300 font-bold text-xs px-4 py-2.5 rounded-xl cursor-pointer">Cancelar</button>
+            <button @click="guardarConfiguracionMantenimiento" :disabled="guardandoConfig" class="bg-red-700 hover:bg-red-800 text-white font-black text-xs uppercase px-6 py-2.5 rounded-xl cursor-pointer disabled:opacity-50">
+              {{ guardandoConfig ? '⏳ Guardando...' : 'Guardar Ajustes' }}
+            </button>
+          </div>
+        </div>
+      </div>
 
       <!-- 🔑 MODAL DE REGISTRO KILOMETRAJE FINAL -->
       <div v-if="prestamoADevolver" class="fixed inset-0 bg-zinc-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
