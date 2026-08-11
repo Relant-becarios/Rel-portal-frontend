@@ -210,6 +210,45 @@ const obtenerResumenTiempoSla = (ticket: any) => {
   }
 }
 
+// 📄 HELPER DE DESCARGA Y LIMPIEZA DE URLs DE ADJUNTOS
+const obtenerUrlLimpia = (archivoRaw: any): string => {
+  if (!archivoRaw) return ''
+  let url = archivoRaw
+  if (typeof archivoRaw === 'string') {
+    try {
+      const parsed = JSON.parse(archivoRaw)
+      if (Array.isArray(parsed)) {
+        url = parsed[0] || ''
+      } else if (typeof parsed === 'object' && parsed !== null) {
+        url = parsed.data || parsed.url || archivoRaw
+      } else {
+        url = parsed
+      }
+    } catch (e) {
+      url = archivoRaw
+    }
+  } else if (Array.isArray(archivoRaw)) {
+    url = archivoRaw[0] || ''
+  }
+
+  if (typeof url === 'string') {
+    url = url.replace(/^[\[\s"']+|[\]\s"']+$/g, '').trim()
+    if (url && !url.startsWith('http://') && !url.startsWith('https://') && !url.startsWith('data:')) {
+      url = `https://${url}`
+    }
+  }
+  return url
+}
+
+const abrirArchivoLink = (archivoRaw: any) => {
+  const url = obtenerUrlLimpia(archivoRaw)
+  if (!url) {
+    alert('❌ No se encontró una URL válida para descargar o abrir.')
+    return
+  }
+  window.open(url, '_blank', 'noopener,noreferrer')
+}
+
 // ☁️ FUNCIÓN DE SUBIDA DIRECTA A CLOUDINARY
 const subirACloudinary = async (file: File): Promise<string> => {
   const formData = new FormData()
@@ -690,26 +729,33 @@ const cerrarWorkspace = () => {
                     <p :class="esModoOscuro ? 'bg-zinc-950/40 border-zinc-800/40 text-zinc-300' : 'bg-white border-slate-200 text-slate-700'" class="text-sm whitespace-pre-line mt-1 p-3 sm:p-4 rounded-xl border leading-relaxed max-h-40 overflow-y-auto">{{ ticketActivoWorkspace.descripcion }}</p>
                   </div>
 
-                  <div v-if="ticketActivoWorkspace.archivos && ticketActivoWorkspace.archivos.length > 0" class="pt-4 border-t" :class="esModoOscuro ? 'border-zinc-800' : 'border-slate-200'">
-                    <label class="text-[10px] uppercase font-bold text-zinc-500 block mb-2">📎 Documentos / Archivos Adjuntos ({{ ticketActivoWorkspace.archivos.length }})</label>
+                  <!-- DOCUMENTOS / ARCHIVOS ADJUNTOS CON MANEJO DE DESCARGA DIRECTA -->
+                  <div v-if="(ticketActivoWorkspace.archivos && ticketActivoWorkspace.archivos.length > 0) || ticketActivoWorkspace.archivo" class="pt-4 border-t" :class="esModoOscuro ? 'border-zinc-800' : 'border-slate-200'">
+                    <label class="text-[10px] uppercase font-bold text-zinc-500 block mb-2">📎 Documentos / Archivos Adjuntos</label>
                     <div class="grid grid-cols-1 gap-2">
-                      <div v-for="(archivoItem, index) in ticketActivoWorkspace.archivos" :key="index" :class="esModoOscuro ? 'bg-zinc-900/60 border-zinc-800' : 'bg-white border-slate-200'" class="rounded-xl border p-3">
-                        <template v-if="archivoItem.startsWith('http')">
-                          <a :href="archivoItem" target="_blank" class="bg-red-700 hover:bg-red-800 text-white text-xs font-bold px-4 py-2 rounded-xl flex items-center justify-center gap-2 transition w-full">
-                            📄 Abrir / Descargar Archivo {{ Number(index) + 1 }}
-                          </a>
+                      <div 
+                        v-for="(archivoItem, index) in (ticketActivoWorkspace.archivos && ticketActivoWorkspace.archivos.length ? ticketActivoWorkspace.archivos : [ticketActivoWorkspace.archivo])" 
+                        :key="index" 
+                        :class="esModoOscuro ? 'bg-zinc-900/60 border-zinc-800' : 'bg-white border-slate-200'" 
+                        class="rounded-xl border p-3"
+                      >
+                        <template v-if="obtenerUrlLimpia(archivoItem).startsWith('data:image')">
+                          <img :src="obtenerUrlLimpia(archivoItem)" alt="Evidencia" class="max-w-full max-h-48 object-contain rounded-lg shadow-md mx-auto" />
                         </template>
-                        <template v-else-if="archivoItem.includes('{')">
+                        <template v-else-if="typeof archivoItem === 'string' && archivoItem.includes('{') && archivoItem.includes('data')">
                           <div class="flex justify-between items-center text-xs">
                             <span class="font-mono font-bold truncate pr-2" :class="esModoOscuro ? 'text-zinc-300' : 'text-slate-700'">📦 {{ JSON.parse(archivoItem).nombre }}</span>
                             <a :href="JSON.parse(archivoItem).data" :download="JSON.parse(archivoItem).nombre" class="bg-red-700 hover:bg-red-800 text-white font-bold px-3 py-1 rounded-lg text-[10px] uppercase tracking-wider shrink-0 transition">Descargar 💾</a>
                           </div>
                         </template>
-                        <template v-else-if="archivoItem.startsWith('data:image')">
-                          <img :src="archivoItem" alt="Evidencia" class="max-w-full max-h-48 object-contain rounded-lg shadow-md mx-auto" />
-                        </template>
                         <template v-else>
-                          <a :href="archivoItem" target="_blank" class="bg-red-700 hover:bg-red-800 text-white text-xs font-bold px-4 py-2 rounded-xl flex items-center justify-center gap-2 transition w-full">📄 Ver Archivo {{ Number(index) + 1 }}</a>
+                          <button 
+                            type="button" 
+                            @click="abrirArchivoLink(archivoItem)" 
+                            class="bg-red-700 hover:bg-red-800 text-white text-xs font-bold px-4 py-2.5 rounded-xl flex items-center justify-center gap-2 transition w-full cursor-pointer shadow-md"
+                          >
+                            📄 Abrir / Descargar Archivo {{ Number(index) + 1 }}
+                          </button>
                         </template>
                       </div>
                     </div>

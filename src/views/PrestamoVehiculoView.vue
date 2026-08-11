@@ -25,7 +25,7 @@ const archivoFotoKmFin = ref<File | null>(null)
 const observacionesDevolucion = ref('')
 const subiendoDevolucion = ref(false)
 
-// Modal de Configuración de Mantenimiento (ADMIN/OWNER/JEFE)
+// Modal de Configuración de Mantenimiento
 const vehiculoAConfigurar = ref<any | null>(null)
 const configEstado = ref('DISPONIBLE')
 const configLimiteKm = ref(10000)
@@ -77,6 +77,7 @@ const OBTENER_DATOS_VEHICULOS = gql`
     }
     obtenerPrestamosVehiculos {
       id
+      solicitanteId
       justificacion
       numPersonas
       llevaMaterial
@@ -88,6 +89,7 @@ const OBTENER_DATOS_VEHICULOS = gql`
       fotoKilometrajeIni
       fotoKilometrajeFin
       comentarios
+      observacionesDev
       estado
       vehiculo { id nombre placas kilometrajeActual }
       solicitante { id nombre email }
@@ -127,6 +129,15 @@ const FINALIZAR_PRESTAMO_MUTATION = gql`
   }
 `
 
+const CANCELAR_PRESTAMO_MUTATION = gql`
+  mutation CancelarPrestamoVehiculo($prestamoId: String!, $motivo: String) {
+    cancelarPrestamoVehiculo(prestamoId: $prestamoId, motivo: $motivo) {
+      id
+      estado
+    }
+  }
+`
+
 const CAMBIAR_ESTADO_MUTATION = gql`
   mutation CambiarEstadoVehiculo($vehiculoId: String!, $nuevoEstado: EstadoVehiculo!) {
     cambiarEstadoVehiculo(vehiculoId: $vehiculoId, nuevoEstado: $nuevoEstado) {
@@ -160,6 +171,7 @@ const { result, loading, refetch } = useQuery(OBTENER_DATOS_VEHICULOS, null, {
 
 const { mutate: apiSolicitar } = useMutation(SOLICITAR_VEHICULO_MUTATION)
 const { mutate: apiFinalizar } = useMutation(FINALIZAR_PRESTAMO_MUTATION)
+const { mutate: apiCancelar } = useMutation(CANCELAR_PRESTAMO_MUTATION)
 const { mutate: apiCambiarEstado } = useMutation(CAMBIAR_ESTADO_MUTATION)
 const { mutate: apiConfigurarMantenimiento } = useMutation(CONFIGURAR_MANTENIMIENTO_MUTATION)
 const { mutate: apiEnviarReporteSemanal } = useMutation(ENVIAR_REPORTE_SEMANAL)
@@ -167,7 +179,6 @@ const { mutate: apiEnviarReporteSemanal } = useMutation(ENVIAR_REPORTE_SEMANAL)
 const vehiculos = computed(() => result.value?.obtenerVehiculos || [])
 const prestamos = computed(() => result.value?.obtenerPrestamosVehiculos || [])
 
-// Validar si el usuario actual es JEFE, ADMIN u OWNER
 const esAdminOJefe = computed(() => {
   const rol = result.value?.me?.rol
   return ['ADMIN', 'OWNER', 'JEFE'].includes(rol)
@@ -222,6 +233,20 @@ const guardarConfiguracionMantenimiento = async () => {
     alert('Error al guardar configuración: ' + err.message)
   } finally {
     guardandoConfig.value = false
+  }
+}
+
+// 🚫 ACCIÓN PARA CANCELAR RESERVA
+const cancelarReserva = async (prestamoId: string) => {
+  const motivo = prompt('¿Motivo de la cancelación de la reserva? (Opcional)')
+  if (motivo === null) return; // Se canceló la confirmación
+
+  try {
+    await apiCancelar({ prestamoId, motivo: motivo.trim() || null })
+    alert('🚫 Reserva cancelada. El vehículo se liberó correctamente.')
+    refetch()
+  } catch (err: any) {
+    alert('Error al cancelar reserva: ' + err.message)
   }
 }
 
@@ -353,7 +378,7 @@ onMounted(() => {
 
       <main class="flex-1 overflow-y-auto p-6 space-y-8 max-w-7xl mx-auto w-full pb-24">
         
-        <!-- 🚗 CATÁLOGO DE VEHÍCULOS CON FOTOS -->
+        <!-- 🚗 CATÁLOGO DE VEHÍCULOS -->
         <section class="space-y-4 text-left">
           <h3 class="text-xs font-black uppercase tracking-wider text-zinc-400">🚗 Autos Registrados y Especificaciones</h3>
           
@@ -379,7 +404,6 @@ onMounted(() => {
                   <span class="text-[10px] font-mono bg-zinc-800 text-zinc-300 px-2 py-0.5 rounded border border-zinc-700">Placas: {{ v.placas }}</span>
                 </div>
 
-                <!-- 🔽 SI ES ADMIN/JEFE/OWNER: MENÚ DESPLEGABLE DE ESTADO -->
                 <select 
                   v-if="esAdminOJefe"
                   :value="v.estado"
@@ -390,7 +414,7 @@ onMounted(() => {
                     'bg-amber-950/80 text-amber-400 border-amber-500/50': v.estado === 'EN_USO',
                     'bg-red-950/80 text-red-400 border-red-500/50': v.estado === 'MANTENIMIENTO'
                   }"
-                  class="text-[10px] font-bold uppercase px-3 py-1 rounded-lg border cursor-pointer focus:outline-none appearance-none pr-7 relative bg-[url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%23FFFFFF%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E')] bg-[length:9px_9px] bg-[right_8px_center] bg-no-repeat"
+                  class="text-[10px] font-bold uppercase px-3 py-1 rounded-lg border cursor-pointer focus:outline-none appearance-none pr-7 relative bg-[url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%23FFFFFF%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E')] bg-size-[9px_9px] bg-position-[right_8px_center] bg-no-repeat"
                 >
                   <option value="DISPONIBLE" class="bg-zinc-900 text-emerald-400 font-bold">DISPONIBLE</option>
                   <option value="EN_USO" class="bg-zinc-900 text-amber-400 font-bold">EN_USO</option>
@@ -421,7 +445,7 @@ onMounted(() => {
                 </div>
                 <div>
                   <span class="text-[9px] text-zinc-500 uppercase block">Kilometraje</span>
-                  <span class="font-bold">🛣️ {{ v.kilometrajeActual.toLocaleString() }} km</span>
+                  <span class="font-bold">MW {{ v.kilometrajeActual.toLocaleString() }} km</span>
                 </div>
                 <div class="col-span-2 pt-1 flex justify-between items-center">
                   <div>
@@ -429,7 +453,6 @@ onMounted(() => {
                     <span class="font-bold text-amber-400">🔧 {{ ((v.ultimoServicioKm + (v.limiteKmMantenimiento || 10000)) - v.kilometrajeActual).toLocaleString() }} km</span>
                   </div>
 
-                  <!-- ⚙️ BOTÓN DE CONFIGURACIÓN PARA JEFE/ADMIN/OWNER -->
                   <button 
                     v-if="esAdminOJefe" 
                     @click.stop="abrirModalConfiguracion(v)" 
@@ -527,7 +550,7 @@ onMounted(() => {
           </form>
         </section>
 
-        <!-- 📋 BITÁCORA DE USO -->
+        <!-- 📋 BITÁCORA DE USO (CON CANCELACIÓN DE RESERVA) -->
         <section class="space-y-4 text-left">
           <h3 class="text-xs font-black uppercase tracking-wider text-zinc-400">📋 Bitácora de Registro y Devolución</h3>
 
@@ -536,7 +559,16 @@ onMounted(() => {
               <div class="space-y-1 min-w-0">
                 <div class="flex items-center gap-2">
                   <span class="font-black text-sm">{{ p.vehiculo?.nombre }} ({{ p.vehiculo?.placas }})</span>
-                  <span class="text-[10px] font-bold px-2 py-0.5 rounded uppercase border bg-zinc-800 border-zinc-700 text-zinc-300">{{ p.estado }}</span>
+                  <span 
+                    :class="{
+                      'bg-amber-500/20 text-amber-400 border-amber-500/30': p.estado === 'EN_CURSO',
+                      'bg-emerald-500/20 text-emerald-400 border-emerald-500/30': p.estado === 'FINALIZADO',
+                      'bg-red-500/20 text-red-400 border-red-500/30': p.estado === 'RECHAZADO'
+                    }"
+                    class="text-[10px] font-bold px-2 py-0.5 rounded uppercase border"
+                  >
+                    {{ p.estado === 'RECHAZADO' ? 'CANCELADO' : p.estado }}
+                  </span>
                 </div>
                 <p class="text-xs text-zinc-400">👤 Operador: <strong class="text-white">{{ p.solicitante?.nombre }}</strong> | Justificación: {{ p.justificacion }}</p>
                 <div class="text-[11px] font-mono text-zinc-500 pt-1">
@@ -544,6 +576,9 @@ onMounted(() => {
                 </div>
                 <div v-if="p.comentarios" class="text-[11px] italic text-zinc-400 pt-0.5">
                   💬 Comentario: {{ p.comentarios }}
+                </div>
+                <div v-if="p.observacionesDev" class="text-[11px] font-mono text-amber-400 pt-0.5">
+                  📝 Nota Cierre / Cancelación: {{ p.observacionesDev }}
                 </div>
 
                 <!-- 📷 EVIDENCIAS EN FOTO -->
@@ -557,9 +592,17 @@ onMounted(() => {
                 </div>
               </div>
 
-              <div v-if="p.estado === 'EN_CURSO'" class="shrink-0">
-                <button @click="prestamoADevolver = p" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-5 py-2.5 rounded-xl cursor-pointer">
-                  🔑 Registrar Devolución / Foto Km
+              <!-- BOTONES DE ACCIÓN PARA PRÉSTAMOS EN CURSO -->
+              <div v-if="p.estado === 'EN_CURSO'" class="shrink-0 flex flex-col sm:flex-row gap-2">
+                <button @click="prestamoADevolver = p" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-4 py-2.5 rounded-xl cursor-pointer transition">
+                  🔑 Devolver / Foto Km
+                </button>
+                <button 
+                  v-if="p.solicitanteId === result?.me?.id || esAdminOJefe" 
+                  @click="cancelarReserva(p.id)" 
+                  class="bg-red-950/80 hover:bg-red-900 border border-red-800 text-red-300 font-bold text-xs px-4 py-2.5 rounded-xl cursor-pointer transition"
+                >
+                  🚫 Cancelar Reserva
                 </button>
               </div>
             </div>
