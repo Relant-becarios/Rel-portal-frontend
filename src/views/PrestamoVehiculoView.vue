@@ -46,7 +46,7 @@ const subirACloudinary = async (file: File): Promise<string> => {
   formData.append('file', file)
   formData.append('upload_preset', 'ls6wqdvy')
 
-  const response = await fetch('https://api.cloudinary.com/v1_1/pldkd8np/image/upload', {
+  const response = await fetch('https://api.cloudinary.com/v1_1/pldkd8np/auto/upload', {
     method: 'POST',
     body: formData
   })
@@ -179,10 +179,17 @@ const { mutate: apiEnviarReporteSemanal } = useMutation(ENVIAR_REPORTE_SEMANAL)
 const vehiculos = computed(() => result.value?.obtenerVehiculos || [])
 const prestamos = computed(() => result.value?.obtenerPrestamosVehiculos || [])
 
-const esAdminOJefe = computed(() => {
-  const rol = result.value?.me?.rol
-  return ['ADMIN', 'OWNER', 'JEFE'].includes(rol)
-})
+// ROLES Y PERMISOS
+const esOwner = computed(() => result.value?.me?.rol === 'OWNER')
+const esAdminOJefe = computed(() => ['ADMIN', 'OWNER', 'JEFE'].includes(result.value?.me?.rol))
+
+// Validar si el usuario actual tiene permisos para editar un vehículo específico
+const puedeEditarVehiculo = (vehiculo: any) => {
+  if (vehiculo.estado === 'MANTENIMIENTO') {
+    return esOwner.value
+  }
+  return esAdminOJefe.value
+}
 
 const vehiculoSeleccionadoObj = computed(() => {
   return vehiculos.value.find((v: any) => v.id === vehiculoSeleccionadoId.value)
@@ -236,10 +243,10 @@ const guardarConfiguracionMantenimiento = async () => {
   }
 }
 
-// 🚫 ACCIÓN PARA CANCELAR RESERVA
+// 🚫 ACCIÓN PARA CANCELAR RESERVA POR ID DE PRÉSTAMO
 const cancelarReserva = async (prestamoId: string) => {
   const motivo = prompt('¿Motivo de la cancelación de la reserva? (Opcional)')
-  if (motivo === null) return; // Se canceló la confirmación
+  if (motivo === null) return;
 
   try {
     await apiCancelar({ prestamoId, motivo: motivo.trim() || null })
@@ -247,6 +254,16 @@ const cancelarReserva = async (prestamoId: string) => {
     refetch()
   } catch (err: any) {
     alert('Error al cancelar reserva: ' + err.message)
+  }
+}
+
+// 🚫 CANCELAR RESERVA DIRECTAMENTE DESDE LA TARJETA DEL AUTO
+const cancelarReservaPorVehiculo = async (vehiculoId: string) => {
+  const prestamoActivo = prestamos.value.find((p: any) => p.vehiculo?.id === vehiculoId && p.estado === 'EN_CURSO')
+  if (prestamoActivo) {
+    await cancelarReserva(prestamoActivo.id)
+  } else {
+    alert('No se encontró un registro activo de préstamo para este vehículo.')
   }
 }
 
@@ -397,15 +414,16 @@ onMounted(() => {
               <div v-if="v.fotoUrl" class="w-full h-36 rounded-xl overflow-hidden bg-white/5 flex items-center justify-center p-2 border border-zinc-800/50">
                 <img :src="v.fotoUrl" :alt="v.nombre" class="h-full object-contain hover:scale-105 transition-transform" />
               </div>
-
+size-[
               <div class="flex justify-between items-start">
                 <div>
                   <h4 class="font-black text-base">{{ v.nombre }}</h4>
                   <span class="text-[10px] font-mono bg-zinc-800 text-zinc-300 px-2 py-0.5 rounded border border-zinc-700">Placas: {{ v.placas }}</span>
                 </div>
 
+                <!-- 🔽 SELECTOR DE ESTADO: SOLO OWNER SI ESTÁ EN MANTENIMIENTO, ADMIN/JEFE/OWNER SI NO -->
                 <select 
-                  v-if="esAdminOJefe"
+                  v-if="puedeEditarVehiculo(v)"
                   :value="v.estado"
                   @click.stop
                   @change="(e) => cambiarEstadoManual(v.id, (e.target as HTMLSelectElement).value)"
@@ -414,7 +432,7 @@ onMounted(() => {
                     'bg-amber-950/80 text-amber-400 border-amber-500/50': v.estado === 'EN_USO',
                     'bg-red-950/80 text-red-400 border-red-500/50': v.estado === 'MANTENIMIENTO'
                   }"
-                  class="text-[10px] font-bold uppercase px-3 py-1 rounded-lg border cursor-pointer focus:outline-none appearance-none pr-7 relative bg-[url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%23FFFFFF%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E')] bg-size-[9px_9px] bg-position-[right_8px_center] bg-no-repeat"
+                  class="text-[10px] font-bold uppercase px-3 py-1 rounded-lg border cursor-pointer focus:outline-none appearance-none pr-7 relative bg-[url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%23FFFFFF%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E')] bg-[length:9px_9px] bg-[right_8px_center] bg-no-repeat"
                 >
                   <option value="DISPONIBLE" class="bg-zinc-900 text-emerald-400 font-bold">DISPONIBLE</option>
                   <option value="EN_USO" class="bg-zinc-900 text-amber-400 font-bold">EN_USO</option>
@@ -445,7 +463,7 @@ onMounted(() => {
                 </div>
                 <div>
                   <span class="text-[9px] text-zinc-500 uppercase block">Kilometraje</span>
-                  <span class="font-bold">MW {{ v.kilometrajeActual.toLocaleString() }} km</span>
+                  <span class="font-bold">🛣️ {{ v.kilometrajeActual.toLocaleString() }} km</span>
                 </div>
                 <div class="col-span-2 pt-1 flex justify-between items-center">
                   <div>
@@ -454,7 +472,7 @@ onMounted(() => {
                   </div>
 
                   <button 
-                    v-if="esAdminOJefe" 
+                    v-if="puedeEditarVehiculo(v)" 
                     @click.stop="abrirModalConfiguracion(v)" 
                     class="bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-bold text-[10px] px-2.5 py-1 rounded-lg border border-zinc-700 transition"
                   >
@@ -462,6 +480,18 @@ onMounted(() => {
                   </button>
                 </div>
               </div>
+
+              <!-- 🚫 BOTÓN DE CANCELACIÓN DIRECTA CUANDO EL AUTO ESTÁ EN_USO -->
+              <div v-if="v.estado === 'EN_USO'" class="pt-2 border-t border-zinc-800/60 flex justify-between items-center">
+                <span class="text-[10px] text-amber-400 font-bold">🚗 Vehículo en uso</span>
+                <button 
+                  @click.stop="cancelarReservaPorVehiculo(v.id)" 
+                  class="bg-red-950/80 hover:bg-red-900 border border-red-800 text-red-300 font-bold text-[10px] px-3 py-1 rounded-lg cursor-pointer transition"
+                >
+                  🚫 Cancelar Reserva
+                </button>
+              </div>
+
             </div>
           </div>
         </section>
@@ -550,7 +580,7 @@ onMounted(() => {
           </form>
         </section>
 
-        <!-- 📋 BITÁCORA DE USO (CON CANCELACIÓN DE RESERVA) -->
+        <!-- 📋 BITÁCORA DE USO -->
         <section class="space-y-4 text-left">
           <h3 class="text-xs font-black uppercase tracking-wider text-zinc-400">📋 Bitácora de Registro y Devolución</h3>
 
