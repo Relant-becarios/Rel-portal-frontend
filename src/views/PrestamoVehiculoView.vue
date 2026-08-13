@@ -470,7 +470,7 @@ onMounted(() => {
                   v-else
                   :class="{
                     'bg-emerald-500/20 text-emerald-400 border-emerald-500/30': v.estado === 'DISPONIBLE',
-                    'bg-amber-500/20 text-amber-400 border-amber-500/30': v.estado === 'EN_USO',
+                    'bg-amber-500/20 text-amber-400 border-amber-500/30': v.estado === 'RESERVADO',
                     'bg-red-500/20 text-red-400 border-red-500/30': v.estado === 'MANTENIMIENTO'
                   }"
                   class="text-[9px] font-bold uppercase px-2 py-0.5 rounded-md border"
