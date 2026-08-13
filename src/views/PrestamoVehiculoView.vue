@@ -201,6 +201,11 @@ const puedeEditarVehiculo = (_vehiculo: any) => {
   return esOwner.value
 }
 
+// BUSCAR PRÉSTAMO ACTIVO
+const obtenerPrestamoActivo = (vehiculoId: string) => {
+  return prestamos.value.find((p: any) => p.vehiculo?.id === vehiculoId && p.estado === 'EN_CURSO')
+}
+
 const vehiculoSeleccionadoObj = computed(() => {
   return vehiculos.value.find((v: any) => v.id === vehiculoSeleccionadoId.value)
 })
@@ -273,7 +278,7 @@ const cancelarReserva = async (prestamoId: string) => {
 }
 
 const cancelarReservaPorVehiculo = async (vehiculoId: string) => {
-  const prestamoActivo = prestamos.value.find((p: any) => p.vehiculo?.id === vehiculoId && p.estado === 'EN_CURSO')
+  const prestamoActivo = obtenerPrestamoActivo(vehiculoId)
   if (prestamoActivo) {
     await cancelarReserva(prestamoActivo.id)
   } else {
@@ -341,7 +346,7 @@ const enviarSolicitud = async () => {
   }
 }
 
-// 🔑 FINALIZAR PRÉSTAMO (SUBIDA DE FOTO INICIAL Y/O FINAL)
+// 🔑 FINALIZAR PRÉSTAMO
 const procesarDevolucion = async () => {
   if (!prestamoADevolver.value || !kmFinalDevolucion.value) {
     alert('❌ Ingresa el kilometraje final.')
@@ -350,7 +355,6 @@ const procesarDevolucion = async () => {
 
   const faltaFotoInicial = !prestamoADevolver.value.fotoKilometrajeIni
 
-  // Si no hay foto inicial previa y tampoco seleccionó ninguna foto ahora, exigir al menos una de las dos
   if (faltaFotoInicial && !archivoFotoKmIniDevolucion.value && !archivoFotoKmFin.value) {
     alert('❌ Como faltaba la foto inicial, debes adjuntar al menos una foto del odómetro (Inicial o Final) para cerrar la devolución.')
     return
@@ -456,10 +460,10 @@ onMounted(() => {
                   @change="(e) => cambiarEstadoManual(v.id, (e.target as HTMLSelectElement).value)"
                   :class="{
                     'bg-emerald-950/80 text-emerald-400 border-emerald-500/50': v.estado === 'DISPONIBLE',
-                    'bg-amber-950/80 text-amber-400 border-amber-500/50': v.estado === 'RESERVADO',
+                    'bg-amber-950/80 text-amber-400 border-amber-500/50': v.estado === 'EN_USO',
                     'bg-red-950/80 text-red-400 border-red-500/50': v.estado === 'MANTENIMIENTO'
                   }"
-                  class="text-[10px] font-bold uppercase px-3 py-1 rounded-lg border cursor-pointer focus:outline-none appearance-none pr-7 relative bg-[url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%23FFFFFF%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%2 0-13-5.4H18.4c-5%200-9.3%201.8-12.9%2 05.4A17.6%2 017.6%2 0%2 0%2 0%2 0%2 8２.２c０％２０５％１．８％２９．３％５．４％１２．９l１２８％１２７．９c３．６％３．６％７．８％５．４％１２．８％５．４s９．２－１．８％１２．８－５．４L２８７％９５c３．５－３．５％５．４－７．８％５．４－１２．８％０－５－１．９－９．２－５．５－１２．８z％２２／％３E％３C％２Fsvg％３E')] bg-size-[9px_9px] bg-position-[right_8px_center] bg-no-repeat"
+                  class="text-[10px] font-bold uppercase px-3 py-1 rounded-lg border cursor-pointer focus:outline-none appearance-none pr-7 relative bg-[url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%23FFFFFF%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E')] bg-size-[9px_9px] bg-position-[right_8px_center] bg-no-repeat"
                 >
                   <option value="DISPONIBLE" class="bg-zinc-900 text-emerald-400 font-bold">DISPONIBLE</option>
                   <option value="EN_USO" class="bg-zinc-900 text-amber-400 font-bold">RESERVADO</option>
@@ -470,12 +474,12 @@ onMounted(() => {
                   v-else
                   :class="{
                     'bg-emerald-500/20 text-emerald-400 border-emerald-500/30': v.estado === 'DISPONIBLE',
-                    'bg-amber-500/20 text-amber-400 border-amber-500/30': v.estado === 'RESERVADO',
+                    'bg-amber-500/20 text-amber-400 border-amber-500/30': v.estado === 'EN_USO',
                     'bg-red-500/20 text-red-400 border-red-500/30': v.estado === 'MANTENIMIENTO'
                   }"
                   class="text-[9px] font-bold uppercase px-2 py-0.5 rounded-md border"
                 >
-                  {{ v.estado }}
+                  {{ v.estado === 'EN_USO' ? 'RESERVADO' : v.estado }}
                 </span>
               </div>
 
@@ -508,10 +512,11 @@ onMounted(() => {
                 </div>
               </div>
 
-              <div v-if="v.estado === 'RESERVADO'" class="pt-2 border-t border-zinc-800/60 flex justify-between items-center">
+              <!-- SOLO SE MUESTRA SI REALMENTE TIENE UN PRÉSTAMO EN CURSO -->
+              <div v-if="obtenerPrestamoActivo(v.id)" class="pt-2 border-t border-zinc-800/60 flex justify-between items-center">
                 <span class="text-[10px] text-amber-400 font-bold">🚗 Vehículo reservado</span>
                 <button 
-                  @click.stop="cancelarReservaPorVehiculo(v.id)" 
+                  @click.stop="cancelarReserva(obtenerPrestamoActivo(v.id).id)" 
                   class="bg-red-950/80 hover:bg-red-900 border border-red-800 text-red-300 font-bold text-[10px] px-3 py-1 rounded-lg cursor-pointer transition"
                 >
                   🚫 Cancelar Reserva
