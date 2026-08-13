@@ -21,6 +21,7 @@ const guardandoSolicitud = ref(false)
 // Modal de Devolución
 const prestamoADevolver = ref<any | null>(null)
 const kmFinalDevolucion = ref<number | null>(null)
+const archivoFotoKmIniDevolucion = ref<File | null>(null)
 const archivoFotoKmFin = ref<File | null>(null)
 const observacionesDevolucion = ref('')
 const subiendoDevolucion = ref(false)
@@ -33,6 +34,7 @@ const configUltimoServicioKm = ref(0)
 const guardandoConfig = ref(false)
 
 const inputKmIniRef = ref<HTMLInputElement | null>(null)
+const inputKmIniDevRef = ref<HTMLInputElement | null>(null)
 const inputKmFinRef = ref<HTMLInputElement | null>(null)
 
 const toggleTema = () => {
@@ -124,8 +126,20 @@ const SOLICITAR_VEHICULO_MUTATION = gql`
 `
 
 const FINALIZAR_PRESTAMO_MUTATION = gql`
-  mutation FinalizarPrestamo($prestamoId: String!, $kilometrajeFinal: Int!, $fotoKilometrajeFin: String, $observaciones: String) {
-    finalizarPrestamoVehiculo(prestamoId: $prestamoId, kilometrajeFinal: $kilometrajeFinal, fotoKilometrajeFin: $fotoKilometrajeFin, observaciones: $observaciones) { id }
+  mutation FinalizarPrestamo(
+    $prestamoId: String!, 
+    $kilometrajeFinal: Int!, 
+    $fotoKilometrajeIni: String,
+    $fotoKilometrajeFin: String, 
+    $observaciones: String
+  ) {
+    finalizarPrestamoVehiculo(
+      prestamoId: $prestamoId, 
+      kilometrajeFinal: $kilometrajeFinal, 
+      fotoKilometrajeIni: $fotoKilometrajeIni,
+      fotoKilometrajeFin: $fotoKilometrajeFin, 
+      observaciones: $observaciones
+    ) { id }
   }
 `
 
@@ -196,6 +210,11 @@ const seleccionarFotoIni = (event: Event) => {
   if (target.files && target.files[0]) archivoFotoKmIni.value = target.files[0]
 }
 
+const seleccionarFotoIniDev = (event: Event) => {
+  const target = event.target as HTMLInputElement
+  if (target.files && target.files[0]) archivoFotoKmIniDevolucion.value = target.files[0]
+}
+
 const seleccionarFotoFin = (event: Event) => {
   const target = event.target as HTMLInputElement
   if (target.files && target.files[0]) archivoFotoKmFin.value = target.files[0]
@@ -262,7 +281,7 @@ const cancelarReservaPorVehiculo = async (vehiculoId: string) => {
   }
 }
 
-// 🔒 REGISTRAR SALIDA DE AUTO (FOTO INICIAL AHORA ES OPCIONAL)
+// 🔒 REGISTRAR SALIDA DE AUTO
 const enviarSolicitud = async () => {
   if (!vehiculoSeleccionadoId.value) {
     alert('❌ Debes seleccionar un vehículo de la lista.')
@@ -322,23 +341,28 @@ const enviarSolicitud = async () => {
   }
 }
 
-// 🔑 FINALIZAR PRÉSTAMO (FOTO FINAL ES OBLIGATORIA SI NO HUBO FOTO INICIAL)
+// 🔑 FINALIZAR PRÉSTAMO (SUBIDA DE FOTO INICIAL Y/O FINAL)
 const procesarDevolucion = async () => {
   if (!prestamoADevolver.value || !kmFinalDevolucion.value) {
     alert('❌ Ingresa el kilometraje final.')
     return
   }
 
-  const tieneFotoInicial = !!prestamoADevolver.value.fotoKilometrajeIni
+  const faltaFotoInicial = !prestamoADevolver.value.fotoKilometrajeIni
 
-  // Si no se adjuntó foto inicial al salir, la foto final es ESTRICTAMENTE OBLIGATORIA
-  if (!tieneFotoInicial && !archivoFotoKmFin.value) {
-    alert('❌ Como no se adjuntó foto inicial del odómetro, es OBLIGATORIO adjuntar la foto final para realizar la devolución.')
+  // Si no hay foto inicial previa y tampoco seleccionó ninguna foto ahora, exigir al menos una de las dos
+  if (faltaFotoInicial && !archivoFotoKmIniDevolucion.value && !archivoFotoKmFin.value) {
+    alert('❌ Como faltaba la foto inicial, debes adjuntar al menos una foto del odómetro (Inicial o Final) para cerrar la devolución.')
     return
   }
 
   subiendoDevolucion.value = true
   try {
+    let urlFotoIni: string | null = null
+    if (archivoFotoKmIniDevolucion.value) {
+      urlFotoIni = await subirACloudinary(archivoFotoKmIniDevolucion.value)
+    }
+
     let urlFotoFin: string | null = null
     if (archivoFotoKmFin.value) {
       urlFotoFin = await subirACloudinary(archivoFotoKmFin.value)
@@ -347,6 +371,7 @@ const procesarDevolucion = async () => {
     await apiFinalizar({
       prestamoId: prestamoADevolver.value.id,
       kilometrajeFinal: Number(kmFinalDevolucion.value),
+      fotoKilometrajeIni: urlFotoIni,
       fotoKilometrajeFin: urlFotoFin,
       observaciones: observacionesDevolucion.value.trim() || null
     })
@@ -355,6 +380,7 @@ const procesarDevolucion = async () => {
     prestamoADevolver.value = null
     kmFinalDevolucion.value = null
     observacionesDevolucion.value = ''
+    archivoFotoKmIniDevolucion.value = null
     archivoFotoKmFin.value = null
     refetch()
   } catch (err: any) {
@@ -436,7 +462,7 @@ onMounted(() => {
                   class="text-[10px] font-bold uppercase px-3 py-1 rounded-lg border cursor-pointer focus:outline-none appearance-none pr-7 relative bg-[url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%23FFFFFF%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E')] bg-size-[9px_9px] bg-position-[right_8px_center] bg-no-repeat"
                 >
                   <option value="DISPONIBLE" class="bg-zinc-900 text-emerald-400 font-bold">DISPONIBLE</option>
-                  <option value="EN_USO" class="bg-zinc-900 text-amber-400 font-bold">EN_USO</option>
+                  <option value="EN_USO" class="bg-zinc-900 text-amber-400 font-bold">RESERVADO</option>
                   <option value="MANTENIMIENTO" class="bg-zinc-900 text-red-400 font-bold">MANTENIMIENTO</option>
                 </select>
 
@@ -483,7 +509,7 @@ onMounted(() => {
               </div>
 
               <div v-if="v.estado === 'EN_USO'" class="pt-2 border-t border-zinc-800/60 flex justify-between items-center">
-                <span class="text-[10px] text-amber-400 font-bold">🚗 Vehículo en uso</span>
+                <span class="text-[10px] text-amber-400 font-bold">🚗 Vehículo reservado</span>
                 <button 
                   @click.stop="cancelarReservaPorVehiculo(v.id)" 
                   class="bg-red-950/80 hover:bg-red-900 border border-red-800 text-red-300 font-bold text-[10px] px-3 py-1 rounded-lg cursor-pointer transition"
@@ -547,7 +573,6 @@ onMounted(() => {
               </div>
             </div>
 
-            <!-- 📅 SECCIÓN FECHA / HORA CON TEXTO GUÍA -->
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label class="text-xs font-bold uppercase text-zinc-400 block mb-1">Fecha / Hora Salida: *</label>
@@ -562,7 +587,6 @@ onMounted(() => {
               </div>
             </div>
 
-            <!-- 📷 FOTO INICIAL OPCIONAL -->
             <div>
               <label class="text-xs font-bold uppercase text-zinc-400 block mb-1">📷 Foto del Odómetro / Kilometraje Inicial (Opcional):</label>
               <input type="file" ref="inputKmIniRef" accept="image/*" class="hidden" @change="seleccionarFotoIni" />
@@ -652,7 +676,7 @@ onMounted(() => {
             <label class="text-xs font-bold uppercase text-zinc-400 block mb-1">Estado del Auto:</label>
             <select v-model="configEstado" :class="esModoOscuro ? 'bg-zinc-950 border-zinc-800 text-white' : 'bg-slate-100 border-slate-300 text-slate-900'" class="w-full p-3 text-xs rounded-xl border focus:outline-none font-bold">
               <option value="DISPONIBLE">DISPONIBLE</option>
-              <option value="EN_USO">EN_USO</option>
+              <option value="EN_USO">RESERVADO</option>
               <option value="MANTENIMIENTO">MANTENIMIENTO</option>
             </select>
           </div>
@@ -682,23 +706,33 @@ onMounted(() => {
       <div v-if="prestamoADevolver" class="fixed inset-0 bg-zinc-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
         <div :class="esModoOscuro ? 'bg-zinc-900 border-zinc-800 text-white' : 'bg-white border-slate-200 text-slate-800'" class="border rounded-3xl p-6 max-w-md w-full shadow-2xl space-y-4 text-left">
           <h3 class="text-lg font-black">Devolución de Vehículo</h3>
-          <p class="text-xs text-zinc-400">Ingresa el kilometraje final y sube la foto del tablero.</p>
+          <p class="text-xs text-zinc-400">Ingresa el kilometraje final y sube las fotos del tablero.</p>
 
           <div>
             <label class="text-xs font-bold uppercase text-zinc-400 block mb-1">Kilometraje Final Odómetro: *</label>
             <input v-model.number="kmFinalDevolucion" type="number" required placeholder="Ej. 45200" :class="esModoOscuro ? 'bg-zinc-950 border-zinc-800 text-white' : 'bg-slate-100 border-slate-300 text-slate-900'" class="w-full p-3 text-sm rounded-xl border focus:outline-none font-bold font-mono" />
           </div>
 
-          <!-- FOTO FINAL CONDICIONAL EN MODAL -->
+          <!-- BOTÓN PARA FOTO INICIAL FALTANTE -->
+          <div v-if="!prestamoADevolver?.fotoKilometrajeIni" class="p-3 bg-amber-950/40 border border-amber-800/60 rounded-2xl space-y-2">
+            <label class="text-xs font-bold uppercase text-amber-400 block">
+              ⚠️ Foto Odómetro Inicial Pendiente (Faltante):
+            </label>
+            <p class="text-[10px] text-amber-300/80">No se adjuntó foto al salir. Puedes subirla ahora:</p>
+            <input type="file" ref="inputKmIniDevRef" accept="image/*" class="hidden" @change="seleccionarFotoIniDev" />
+            <button type="button" @click="inputKmIniDevRef?.click()" :class="archivoFotoKmIniDevolucion ? 'bg-emerald-800/80 border-emerald-600 text-white' : 'bg-amber-900/80 hover:bg-amber-800 text-amber-100 border-amber-700'" class="text-xs font-bold px-4 py-2.5 rounded-xl cursor-pointer w-full border transition-all">
+              {{ archivoFotoKmIniDevolucion ? `✅ Foto Inicial Cargada: ${archivoFotoKmIniDevolucion.name}` : '📷 Subir Foto Odómetro Inicial (Faltante)' }}
+            </button>
+          </div>
+
+          <!-- BOTÓN PARA FOTO FINAL -->
           <div>
             <label class="text-xs font-bold uppercase text-zinc-400 block mb-1">
               📷 Foto del Odómetro Final:
-              <span class="text-amber-400" v-if="!prestamoADevolver?.fotoKilometrajeIni">* (Obligatoria por falta de foto inicial)</span>
-              <span class="text-zinc-500" v-else>(Opcional)</span>
             </label>
             <input type="file" ref="inputKmFinRef" accept="image/*" class="hidden" @change="seleccionarFotoFin" />
             <button type="button" @click="inputKmFinRef?.click()" :class="archivoFotoKmFin ? 'bg-emerald-800/80 border-emerald-600 text-white' : 'bg-zinc-800 hover:bg-zinc-700 text-white'" class="text-xs font-bold px-4 py-2.5 rounded-xl cursor-pointer w-full border transition-all">
-              {{ archivoFotoKmFin ? `✅ Foto cargada: ${archivoFotoKmFin.name}` : (!prestamoADevolver?.fotoKilometrajeIni ? '📷 Adjuntar Foto Odómetro Final (Obligatorio)' : '📷 Adjuntar Foto Odómetro Final (Opcional)') }}
+              {{ archivoFotoKmFin ? `✅ Foto Final Cargada: ${archivoFotoKmFin.name}` : '📷 Adjuntar Foto Odómetro Final' }}
             </button>
           </div>
 
