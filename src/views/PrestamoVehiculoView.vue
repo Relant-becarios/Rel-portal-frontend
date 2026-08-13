@@ -18,11 +18,6 @@ const comentariosOpcionales = ref('')
 const archivoFotoKmIni = ref<File | null>(null)
 const guardandoSolicitud = ref(false)
 
-// ⛽ ESTADO DE CARGA DE GASOLINA (FORMULARIO PRINCIPAL)
-const cargoGasolina = ref(false)
-const kmGasolina = ref<number | null>(null)
-const archivoFotoFactura = ref<File | null>(null)
-
 // Modal de Devolución
 const prestamoADevolver = ref<any | null>(null)
 const kmFinalDevolucion = ref<number | null>(null)
@@ -61,7 +56,6 @@ const guardandoConfig = ref(false)
 const inputKmIniRef = ref<HTMLInputElement | null>(null)
 const inputKmIniDevRef = ref<HTMLInputElement | null>(null)
 const inputKmFinRef = ref<HTMLInputElement | null>(null)
-const inputFacturaGasRef = ref<HTMLInputElement | null>(null)
 const inputFacturaGasDevRef = ref<HTMLInputElement | null>(null)
 const fileInputsCardMap = ref<Record<string, HTMLInputElement | null>>({})
 
@@ -287,11 +281,6 @@ const seleccionarFotoFin = (event: Event) => {
   if (target.files && target.files[0]) archivoFotoKmFin.value = target.files[0]
 }
 
-const seleccionarFotoFactura = (event: Event) => {
-  const target = event.target as HTMLInputElement
-  if (target.files && target.files[0]) archivoFotoFactura.value = target.files[0]
-}
-
 const seleccionarFotoFacturaDev = (event: Event) => {
   const target = event.target as HTMLInputElement
   if (target.files && target.files[0]) archivoFotoFacturaDevolucion.value = target.files[0]
@@ -407,27 +396,12 @@ const enviarSolicitud = async () => {
     alert('❌ Especifica qué material o carga vas a transportar.')
     return
   }
-  if (cargoGasolina.value) {
-    if (!kmGasolina.value) {
-      alert('❌ Ingresa el kilometraje al momento de cargar gasolina.')
-      return
-    }
-    if (!archivoFotoFactura.value) {
-      alert('❌ Es obligatorio adjuntar la foto del ticket / factura de gasolina.')
-      return
-    }
-  }
 
   guardandoSolicitud.value = true
   try {
     let urlFotoKm: string | null = null
     if (archivoFotoKmIni.value) {
       urlFotoKm = await subirACloudinary(archivoFotoKmIni.value)
-    }
-
-    let urlFactura: string | null = null
-    if (cargoGasolina.value && archivoFotoFactura.value) {
-      urlFactura = await subirACloudinary(archivoFotoFactura.value)
     }
 
     await apiSolicitar({
@@ -440,9 +414,9 @@ const enviarSolicitud = async () => {
       fechaEntregaEstimada: fechaEntregaEstimada.value,
       fotoKilometrajeIni: urlFotoKm,
       comentarios: comentariosOpcionales.value.trim() || null,
-      cargoGasolina: cargoGasolina.value,
-      kmGasolina: cargoGasolina.value ? Number(kmGasolina.value) : null,
-      fotoFacturaGasolina: urlFactura
+      cargoGasolina: false,
+      kmGasolina: null,
+      fotoFacturaGasolina: null
     })
 
     alert('✅ Registro diario asignado correctamente.')
@@ -453,9 +427,6 @@ const enviarSolicitud = async () => {
     numPersonas.value = 1
     llevaMaterial.value = false
     archivoFotoKmIni.value = null
-    cargoGasolina.value = false
-    kmGasolina.value = null
-    archivoFotoFactura.value = null
     fechaRecepcion.value = ''
     fechaEntregaEstimada.value = ''
     refetch()
@@ -720,29 +691,6 @@ onMounted(() => {
               </div>
             </div>
 
-            <!-- ⛽ OPCIÓN MÓDULO CARGA DE GASOLINA -->
-            <div class="p-4 rounded-2xl bg-zinc-950/60 border border-zinc-800/80 space-y-3">
-              <div class="flex items-center gap-3">
-                <input v-model="cargoGasolina" type="checkbox" id="checkGasolina" class="w-4 h-4 accent-red-600 rounded cursor-pointer" />
-                <label for="checkGasolina" class="text-xs font-bold cursor-pointer">⛽ ¿Realizó o realizará carga de gasolina?</label>
-              </div>
-
-              <div v-if="cargoGasolina" class="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
-                <div>
-                  <label class="text-[10px] font-bold uppercase text-zinc-400 block mb-1">Kilometraje al cargar gasolina: *</label>
-                  <input v-model.number="kmGasolina" type="number" required placeholder="Ej. 45150" :class="esModoOscuro ? 'bg-zinc-900 border-zinc-800 text-white' : 'bg-white border-slate-300 text-slate-800'" class="w-full p-2.5 text-xs rounded-xl border focus:outline-none font-mono font-bold" />
-                </div>
-
-                <div>
-                  <label class="text-[10px] font-bold uppercase text-zinc-400 block mb-1">📷 Foto de Factura / Ticket de Gasolina: *</label>
-                  <input type="file" ref="inputFacturaGasRef" accept="image/*" class="hidden" @change="seleccionarFotoFactura" />
-                  <button type="button" @click="inputFacturaGasRef?.click()" :class="archivoFotoFactura ? 'bg-emerald-800/80 border-emerald-600 text-white' : 'bg-zinc-800 hover:bg-zinc-700 text-white'" class="text-xs font-bold px-4 py-2.5 rounded-xl cursor-pointer w-full border transition-all">
-                    {{ archivoFotoFactura ? `✅ Factura: ${archivoFotoFactura.name}` : '📷 Adjuntar Factura / Ticket de Gasolina' }}
-                  </button>
-                </div>
-              </div>
-            </div>
-
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label class="text-xs font-bold uppercase text-zinc-400 block mb-1">Fecha / Hora Salida: *</label>
@@ -876,13 +824,13 @@ onMounted(() => {
                       @change="(e) => seleccionarFotoGasCard(e, p.id)" 
                     />
                     <button 
-                      type="button" 
-                      @click="triggerFileInputCard(p.id)" 
-                      :class="getGasState(p.id).archivo ? 'bg-emerald-800/80 border-emerald-600 text-white' : 'bg-zinc-800 hover:bg-zinc-700 text-white'" 
-                      class="text-xs font-bold px-4 py-2.5 rounded-xl cursor-pointer w-full border transition-all"
-                    >
-                      {{ getGasState(p.id).archivo ? `✅ ${getGasState(p.id).archivo?.name}` : '📷 Adjuntar Factura / Ticket' }}
-                    </button>
+  type="button" 
+  @click="triggerFileInputCard(p.id)" 
+  :class="getGasState(p.id).archivo ? 'bg-emerald-800/80 border-emerald-600 text-white' : 'bg-zinc-800 hover:bg-zinc-700 text-white'" 
+  class="text-xs font-bold px-4 py-2.5 rounded-xl cursor-pointer w-full border transition-all"
+>
+  {{ getGasState(p.id).archivo ? `✅ ${getGasState(p.id).archivo?.name}` : '📷 Adjuntar Factura / Ticket' }}
+</button>
                   </div>
 
                   <div class="col-span-1 sm:col-span-2 flex justify-end pt-1">
@@ -934,6 +882,7 @@ onMounted(() => {
             <button @click="guardarConfiguracionMantenimiento" :disabled="guardandoConfig" class="bg-red-700 hover:bg-red-800 text-white font-black text-xs uppercase px-6 py-2.5 rounded-xl cursor-pointer disabled:opacity-50">
               {{ guardandoConfig ? '⏳ Guardando...' : 'Guardar Ajustes' }}
             </button>
+            
           </div>
         </div>
       </div>
