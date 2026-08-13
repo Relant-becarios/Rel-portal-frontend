@@ -183,7 +183,6 @@ const prestamos = computed(() => result.value?.obtenerPrestamosVehiculos || [])
 const esOwner = computed(() => result.value?.me?.rol === 'OWNER')
 const esAdminOJefe = computed(() => ['ADMIN', 'OWNER', 'JEFE'].includes(result.value?.me?.rol))
 
-// Solo el rol OWNER puede editar el estado o configurar vehículos
 const puedeEditarVehiculo = (_vehiculo: any) => {
   return esOwner.value
 }
@@ -240,7 +239,7 @@ const guardarConfiguracionMantenimiento = async () => {
   }
 }
 
-// 🚫 ACCIÓN PARA CANCELAR RESERVA POR ID DE PRÉSTAMO
+// 🚫 CANCELAR RESERVA
 const cancelarReserva = async (prestamoId: string) => {
   const motivo = prompt('¿Motivo de la cancelación de la reserva? (Opcional)')
   if (motivo === null) return;
@@ -254,7 +253,6 @@ const cancelarReserva = async (prestamoId: string) => {
   }
 }
 
-// 🚫 CANCELAR RESERVA DIRECTAMENTE DESDE LA TARJETA DEL AUTO
 const cancelarReservaPorVehiculo = async (vehiculoId: string) => {
   const prestamoActivo = prestamos.value.find((p: any) => p.vehiculo?.id === vehiculoId && p.estado === 'EN_CURSO')
   if (prestamoActivo) {
@@ -264,7 +262,7 @@ const cancelarReservaPorVehiculo = async (vehiculoId: string) => {
   }
 }
 
-// 🔒 VALIDACIÓN ESTRICTA DEL FORMULARIO
+// 🔒 REGISTRAR SALIDA DE AUTO (FOTO INICIAL AHORA ES OPCIONAL)
 const enviarSolicitud = async () => {
   if (!vehiculoSeleccionadoId.value) {
     alert('❌ Debes seleccionar un vehículo de la lista.')
@@ -286,14 +284,13 @@ const enviarSolicitud = async () => {
     alert('❌ Especifica qué material o carga vas a transportar.')
     return
   }
-  if (!archivoFotoKmIni.value) {
-    alert('❌ Es obligatorio adjuntar la foto del odómetro / kilometraje inicial.')
-    return
-  }
 
   guardandoSolicitud.value = true
   try {
-    const urlFotoKm = await subirACloudinary(archivoFotoKmIni.value)
+    let urlFotoKm: string | null = null
+    if (archivoFotoKmIni.value) {
+      urlFotoKm = await subirACloudinary(archivoFotoKmIni.value)
+    }
 
     await apiSolicitar({
       vehiculoId: vehiculoSeleccionadoId.value,
@@ -325,19 +322,27 @@ const enviarSolicitud = async () => {
   }
 }
 
+// 🔑 FINALIZAR PRÉSTAMO (FOTO FINAL ES OBLIGATORIA SI NO HUBO FOTO INICIAL)
 const procesarDevolucion = async () => {
   if (!prestamoADevolver.value || !kmFinalDevolucion.value) {
     alert('❌ Ingresa el kilometraje final.')
     return
   }
-  if (!archivoFotoKmFin.value) {
-    alert('❌ Es obligatorio adjuntar la foto del odómetro final.')
+
+  const tieneFotoInicial = !!prestamoADevolver.value.fotoKilometrajeIni
+
+  // Si no se adjuntó foto inicial al salir, la foto final es ESTRICTAMENTE OBLIGATORIA
+  if (!tieneFotoInicial && !archivoFotoKmFin.value) {
+    alert('❌ Como no se adjuntó foto inicial del odómetro, es OBLIGATORIO adjuntar la foto final para realizar la devolución.')
     return
   }
 
   subiendoDevolucion.value = true
   try {
-    const urlFotoFin = await subirACloudinary(archivoFotoKmFin.value)
+    let urlFotoFin: string | null = null
+    if (archivoFotoKmFin.value) {
+      urlFotoFin = await subirACloudinary(archivoFotoKmFin.value)
+    }
 
     await apiFinalizar({
       prestamoId: prestamoADevolver.value.id,
@@ -418,7 +423,6 @@ onMounted(() => {
                   <span class="text-[10px] font-mono bg-zinc-800 text-zinc-300 px-2 py-0.5 rounded border border-zinc-700">Placas: {{ v.placas }}</span>
                 </div>
 
-                <!-- 🔽 SELECTOR DE ESTADO: SOLO OWNER -->
                 <select 
                   v-if="puedeEditarVehiculo(v)"
                   :value="v.estado"
@@ -478,7 +482,6 @@ onMounted(() => {
                 </div>
               </div>
 
-              <!-- 🚫 BOTÓN DE CANCELACIÓN DIRECTA CUANDO EL AUTO ESTÁ EN_USO -->
               <div v-if="v.estado === 'EN_USO'" class="pt-2 border-t border-zinc-800/60 flex justify-between items-center">
                 <span class="text-[10px] text-amber-400 font-bold">🚗 Vehículo en uso</span>
                 <button 
@@ -544,23 +547,27 @@ onMounted(() => {
               </div>
             </div>
 
+            <!-- 📅 SECCIÓN FECHA / HORA CON TEXTO GUÍA -->
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label class="text-xs font-bold uppercase text-zinc-400 block mb-1">Fecha / Hora Salida: *</label>
                 <input v-model="fechaRecepcion" type="datetime-local" required :class="esModoOscuro ? 'bg-zinc-950 border-zinc-800 text-white' : 'bg-slate-100 border-slate-300 text-slate-900'" class="w-full p-3 text-xs rounded-xl border focus:outline-none font-mono" />
+                <p class="text-[10px] text-zinc-500 mt-1 font-mono">💡 Formato: Fecha y Hora (Ej. 10:30 a.m. / p.m.)</p>
               </div>
 
               <div>
                 <label class="text-xs font-bold uppercase text-zinc-400 block mb-1">Fecha / Hora Estimada Entrega: *</label>
                 <input v-model="fechaEntregaEstimada" type="datetime-local" required :class="esModoOscuro ? 'bg-zinc-950 border-zinc-800 text-white' : 'bg-slate-100 border-slate-300 text-slate-900'" class="w-full p-3 text-xs rounded-xl border focus:outline-none font-mono" />
+                <p class="text-[10px] text-zinc-500 mt-1 font-mono">💡 Formato: Fecha y Hora (Ej. 10:30 a.m. / p.m.)</p>
               </div>
             </div>
 
+            <!-- 📷 FOTO INICIAL OPCIONAL -->
             <div>
-              <label class="text-xs font-bold uppercase text-zinc-400 block mb-1">📷 Foto del Odómetro / Kilometraje Inicial: *</label>
+              <label class="text-xs font-bold uppercase text-zinc-400 block mb-1">📷 Foto del Odómetro / Kilometraje Inicial (Opcional):</label>
               <input type="file" ref="inputKmIniRef" accept="image/*" class="hidden" @change="seleccionarFotoIni" />
               <button type="button" @click="inputKmIniRef?.click()" :class="archivoFotoKmIni ? 'bg-emerald-800/80 border-emerald-600 text-white' : 'bg-zinc-800 hover:bg-zinc-700 text-white'" class="text-xs font-bold px-4 py-2.5 rounded-xl cursor-pointer border transition-all">
-                {{ archivoFotoKmIni ? `✅ Foto lista: ${archivoFotoKmIni.name}` : '📷 Capturar/Adjuntar Foto del Odómetro (Obligatorio)' }}
+                {{ archivoFotoKmIni ? `✅ Foto lista: ${archivoFotoKmIni.name}` : '📷 Capturar/Adjuntar Foto del Odómetro (Opcional)' }}
               </button>
             </div>
 
@@ -571,7 +578,7 @@ onMounted(() => {
 
             <div class="flex justify-end pt-2">
               <button type="submit" :disabled="guardandoSolicitud" class="bg-red-700 hover:bg-red-800 text-white font-black text-xs uppercase tracking-widest px-8 py-3 rounded-xl cursor-pointer shadow-md disabled:opacity-50">
-                {{ guardandoSolicitud ? '⏳ Subiendo foto y guardando...' : 'Registrar Salida de Auto' }}
+                {{ guardandoSolicitud ? '⏳ Subiendo datos...' : 'Registrar Salida de Auto' }}
               </button>
             </div>
           </form>
@@ -608,7 +615,6 @@ onMounted(() => {
                   📝 Nota Cierre / Cancelación: {{ p.observacionesDev }}
                 </div>
 
-                <!-- 📷 EVIDENCIAS EN FOTO -->
                 <div class="flex flex-wrap gap-2 pt-2 text-[11px] font-bold">
                   <a v-if="p.fotoKilometrajeIni" :href="p.fotoKilometrajeIni" target="_blank" class="text-red-400 hover:text-red-300 underline flex items-center gap-1 bg-red-950/40 border border-red-800/50 px-2.5 py-1 rounded-lg">
                     📷 Ver Foto Odómetro Inicial ↗
@@ -619,7 +625,6 @@ onMounted(() => {
                 </div>
               </div>
 
-              <!-- BOTONES DE ACCIÓN PARA PRÉSTAMOS EN CURSO -->
               <div v-if="p.estado === 'EN_CURSO'" class="shrink-0 flex flex-col sm:flex-row gap-2">
                 <button @click="prestamoADevolver = p" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-4 py-2.5 rounded-xl cursor-pointer transition">
                   🔑 Devolver / Foto Km
@@ -673,7 +678,7 @@ onMounted(() => {
         </div>
       </div>
 
-      <!-- 🔑 MODAL DE REGISTRO KILOMETRAJE FINAL -->
+      <!-- 🔑 MODAL DE DEVOLUCIÓN / KILOMETRAJE FINAL -->
       <div v-if="prestamoADevolver" class="fixed inset-0 bg-zinc-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
         <div :class="esModoOscuro ? 'bg-zinc-900 border-zinc-800 text-white' : 'bg-white border-slate-200 text-slate-800'" class="border rounded-3xl p-6 max-w-md w-full shadow-2xl space-y-4 text-left">
           <h3 class="text-lg font-black">Devolución de Vehículo</h3>
@@ -684,11 +689,16 @@ onMounted(() => {
             <input v-model.number="kmFinalDevolucion" type="number" required placeholder="Ej. 45200" :class="esModoOscuro ? 'bg-zinc-950 border-zinc-800 text-white' : 'bg-slate-100 border-slate-300 text-slate-900'" class="w-full p-3 text-sm rounded-xl border focus:outline-none font-bold font-mono" />
           </div>
 
+          <!-- FOTO FINAL CONDICIONAL EN MODAL -->
           <div>
-            <label class="text-xs font-bold uppercase text-zinc-400 block mb-1">📷 Foto del Odómetro Final: *</label>
+            <label class="text-xs font-bold uppercase text-zinc-400 block mb-1">
+              📷 Foto del Odómetro Final:
+              <span class="text-amber-400" v-if="!prestamoADevolver?.fotoKilometrajeIni">* (Obligatoria por falta de foto inicial)</span>
+              <span class="text-zinc-500" v-else>(Opcional)</span>
+            </label>
             <input type="file" ref="inputKmFinRef" accept="image/*" class="hidden" @change="seleccionarFotoFin" />
             <button type="button" @click="inputKmFinRef?.click()" :class="archivoFotoKmFin ? 'bg-emerald-800/80 border-emerald-600 text-white' : 'bg-zinc-800 hover:bg-zinc-700 text-white'" class="text-xs font-bold px-4 py-2.5 rounded-xl cursor-pointer w-full border transition-all">
-              {{ archivoFotoKmFin ? `✅ Foto cargada: ${archivoFotoKmFin.name}` : '📷 Adjuntar Foto del Odómetro Final (Obligatorio)' }}
+              {{ archivoFotoKmFin ? `✅ Foto cargada: ${archivoFotoKmFin.name}` : (!prestamoADevolver?.fotoKilometrajeIni ? '📷 Adjuntar Foto Odómetro Final (Obligatorio)' : '📷 Adjuntar Foto Odómetro Final (Opcional)') }}
             </button>
           </div>
 
