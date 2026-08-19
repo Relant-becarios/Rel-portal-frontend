@@ -18,10 +18,11 @@ const routes = [
     redirect: '/home'
   },
   {
-    path: '/vacaciones',
-    name: 'vacaciones',
-    component: VacacionesView
-  },
+  path: '/vacaciones',
+  name: 'Vacaciones',
+  component: VacacionesView,
+  meta: { requiereAuth: true } // 🔒 Agregado para exigir inicio de sesión
+},
   {
     path: '/home',
     name: 'Home',
