@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { auth } from '../firebase'
 import { onAuthStateChanged } from 'firebase/auth'
+import VacacionesView from '../views/VacacionesView.vue'
 
 const obtenerUsuarioActual = () => {
   return new Promise((resolve) => {
@@ -15,6 +16,11 @@ const routes = [
   {
     path: '/',
     redirect: '/home'
+  },
+  {
+    path: '/vacaciones',
+    name: 'vacaciones',
+    component: VacacionesView
   },
   {
     path: '/home',

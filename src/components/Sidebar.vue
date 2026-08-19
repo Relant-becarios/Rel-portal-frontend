@@ -80,6 +80,15 @@ const cerrarSesion = async () => {
           <span v-if="!colapsado" class="truncate">Tickets</span>
         </router-link>
 
+        <router-link 
+  to="/vacaciones" 
+  class="flex items-center gap-3 px-4 py-3 rounded-2xl font-bold text-xs transition-all hover:bg-blue-600/10 hover:text-blue-400"
+  active-class="bg-blue-600 text-white shadow-lg"
+>
+  <span></span>
+  <span>Vacaciones y Permisos</span>
+</router-link>
+
         <!-- 🚗 NUEVA ZONA: PRÉSTAMO DE VEHÍCULOS -->
         <router-link 
           to="/prestamo-vehiculos" 
