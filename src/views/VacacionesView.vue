@@ -6,26 +6,105 @@ import { gql } from '@apollo/client/core'
 
 const esModoOscuro = ref(true)
 
+// HOY Y CONTROL DE FECHAS
+const hoy = new Date()
+hoy.setHours(0, 0, 0, 0)
+const padM = String(hoy.getMonth() + 1).padStart(2, '0')
+const padD = String(hoy.getDate()).padStart(2, '0')
+const hoyStr = `${hoy.getFullYear()}-${padM}-${padD}`
+
+// LÓGICA DEL CALENDARIO DINÁMICO
+const fechaCalendario = ref(new Date(hoy.getFullYear(), hoy.getMonth(), 1))
+const fechasSeleccionadas = ref<string[]>([])
+
+const mesAñoTexto = computed(() => {
+  const opciones: Intl.DateTimeFormatOptions = { month: 'long', year: 'numeric' }
+  const texto = fechaCalendario.value.toLocaleDateString('es-ES', opciones)
+  return texto.charAt(0).toUpperCase() + texto.slice(1)
+})
+
+// Bloqueo para no ir a meses pasados
+const esMesActualOPasado = computed(() => {
+  const yearCal = fechaCalendario.value.getFullYear()
+  const monthCal = fechaCalendario.value.getMonth()
+  return yearCal < hoy.getFullYear() || (yearCal === hoy.getFullYear() && monthCal <= hoy.getMonth())
+})
+
+const cambiarMes = (delta: number) => {
+  if (delta < 0 && esMesActualOPasado.value) return
+  const nuevaFecha = new Date(fechaCalendario.value)
+  nuevaFecha.setMonth(nuevaFecha.getMonth() + delta)
+  fechaCalendario.value = nuevaFecha
+}
+
+const irAHoy = () => {
+  fechaCalendario.value = new Date(hoy.getFullYear(), hoy.getMonth(), 1)
+}
+
+// Matriz dinámica de días
+const diasDelMes = computed(() => {
+  const year = fechaCalendario.value.getFullYear()
+  const month = fechaCalendario.value.getMonth()
+
+  const primerDiaSemana = new Date(year, month, 1).getDay()
+  const ultimoDiaMesActual = new Date(year, month + 1, 0).getDate()
+  const ultimoDiaMesAnterior = new Date(year, month, 0).getDate()
+
+  const lista = []
+
+  // Días del mes anterior (relleno)
+  for (let i = primerDiaSemana - 1; i >= 0; i--) {
+    lista.push({
+      dia: ultimoDiaMesAnterior - i,
+      fechaStr: '',
+      esMesActual: false,
+      esPasado: true,
+      seleccionado: false
+    })
+  }
+
+  // Días del mes actual
+  for (let d = 1; d <= ultimoDiaMesActual; d++) {
+    const padMes = String(month + 1).padStart(2, '0')
+    const padDia = String(d).padStart(2, '0')
+    const fechaStr = `${year}-${padMes}-${padDia}`
+    const esPasado = fechaStr < hoyStr
+    const seleccionado = fechasSeleccionadas.value.includes(fechaStr)
+
+    lista.push({
+      dia: d,
+      fechaStr,
+      esMesActual: true,
+      esPasado,
+      seleccionado
+    })
+  }
+
+  // Días del mes siguiente
+  const totalAcumulado = lista.length
+  const limiteCuadricula = totalAcumulado > 35 ? 42 : 35
+  for (let k = 1; k <= limiteCuadricula - totalAcumulado; k++) {
+    lista.push({
+      dia: k,
+      fechaStr: '',
+      esMesActual: false,
+      esPasado: true,
+      seleccionado: false
+    })
+  }
+
+  return lista
+})
+
 // FORMULARIO SOLICITUD DE PERMISO
-const duracionDia = ref('DIA_COMPLETO') // DIA_COMPLETO, PRIMERA_MITAD, SEGUNDA_MITAD
+const duracionDia = ref('DIA_COMPLETO')
 const tipoPermiso = ref('Licencia No Pagada')
-const categoria = ref('VACACIONES') // VACACIONES, ENFERMEDAD, INCAPACIDAD, PERSONAL, MATERNIDAD_PATERNIDAD
+const categoria = ref('VACACIONES')
 const numDias = ref<number>(1)
-const fechaInicio = ref('2026-08-19')
+const fechaInicio = ref('')
 const fechaFin = ref('')
 const motivoSolicitud = ref('')
 const enviandoSolicitud = ref(false)
-
-// CALENDARIO DE AGOSTO 2026
-const mesActual = ref('Agosto 2026')
-const diasCalendario = ref([
-  { dia: 26, otroMes: true }, { dia: 27, otroMes: true }, { dia: 28, otroMes: true }, { dia: 29, otroMes: true }, { dia: 30, otroMes: true }, { dia: 31, otroMes: true }, { dia: 1, otroMes: false },
-  { dia: 2, otroMes: false }, { dia: 3, otroMes: false }, { dia: 4, otroMes: false }, { dia: 5, otroMes: false }, { dia: 6, otroMes: false }, { dia: 7, otroMes: false }, { dia: 8, otroMes: false },
-  { dia: 9, otroMes: false }, { dia: 10, otroMes: false }, { dia: 11, otroMes: false }, { dia: 12, otroMes: false }, { dia: 13, otroMes: false }, { dia: 14, otroMes: false }, { dia: 15, otroMes: false },
-  { dia: 16, otroMes: false }, { dia: 17, otroMes: false }, { dia: 18, otroMes: false }, { dia: 19, seleccionado: true, otroMes: false }, { dia: 20, otroMes: false }, { dia: 21, otroMes: false }, { dia: 22, otroMes: false },
-  { dia: 23, otroMes: false }, { dia: 24, otroMes: false }, { dia: 25, otroMes: false }, { dia: 26, otroMes: false }, { dia: 27, otroMes: false }, { dia: 28, otroMes: false }, { dia: 29, otroMes: false },
-  { dia: 30, otroMes: false }, { dia: 31, otroMes: false }, { dia: 1, otroMes: true }, { dia: 2, otroMes: true }, { dia: 3, otroMes: true }, { dia: 4, otroMes: true }, { dia: 5, otroMes: true }
-])
 
 const toggleTema = () => {
   esModoOscuro.value = !esModoOscuro.value
@@ -108,17 +187,54 @@ const esAdminOJefe = computed(() => {
   return ['ADMIN', 'OWNER', 'JEFE'].includes(rol)
 })
 
-const seleccionarDia = (diaItem: any) => {
-  if (diaItem.otroMes) return
-  diasCalendario.value.forEach(d => d.seleccionado = false)
-  diaItem.seleccionado = true
-  const diaPad = String(diaItem.dia).padStart(2, '0')
-  fechaInicio.value = `2026-08-${diaPad}`
+// Selección controlada de días por saldo de vacaciones
+const seleccionarDia = (item: any) => {
+  if (!item.esMesActual || !item.fechaStr || item.esPasado) return
+
+  const maxDiasDisponibles = usuarioActual.value?.diasVacaciones ?? 0
+
+  if (categoria.value === 'VACACIONES' && maxDiasDisponibles <= 0) {
+    alert('❌ No tienes días de vacaciones disponibles.')
+    return
+  }
+
+  const idx = fechasSeleccionadas.value.indexOf(item.fechaStr)
+  if (idx > -1) {
+    fechasSeleccionadas.value.splice(idx, 1)
+  } else {
+    if (categoria.value === 'VACACIONES') {
+      if (maxDiasDisponibles < 2 && fechasSeleccionadas.value.length >= 1) {
+        alert('⚠️ Solo tienes 1 día disponible de vacaciones. No se permite selección múltiple.')
+        return
+      }
+      if (fechasSeleccionadas.value.length >= maxDiasDisponibles) {
+        alert(`⚠️ Has alcanzado tu límite de ${maxDiasDisponibles} día(s) de vacaciones disponibles.`)
+        return
+      }
+    }
+    fechasSeleccionadas.value.push(item.fechaStr)
+  }
+
+  fechasSeleccionadas.value.sort()
+
+  if (fechasSeleccionadas.value.length > 0) {
+    fechaInicio.value = fechasSeleccionadas.value[0] ?? ''
+    fechaFin.value = fechasSeleccionadas.value[fechasSeleccionadas.value.length - 1] ?? ''
+    numDias.value = fechasSeleccionadas.value.length
+  } else {
+    fechaInicio.value = ''
+    fechaFin.value = ''
+    numDias.value = 1
+  }
 }
 
 const enviarFormulario = async () => {
   if (!motivoSolicitud.value.trim()) {
     alert('❌ Ingresa el motivo de la solicitud.')
+    return
+  }
+  if (!fechaInicio.value) {
+    alert('❌ Selecciona al menos un día en el calendario.')
     return
   }
 
@@ -136,7 +252,10 @@ const enviarFormulario = async () => {
 
     alert('✅ Solicitud enviada correctamente.')
     motivoSolicitud.value = ''
+    fechasSeleccionadas.value = []
     numDias.value = 1
+    fechaInicio.value = ''
+    fechaFin.value = ''
     refetch()
   } catch (err: any) {
     alert('Error al enviar la solicitud: ' + err.message)
@@ -145,7 +264,7 @@ const enviarFormulario = async () => {
   }
 }
 
-const evaluarSolicitud = async (solicitudId: string, aprobado: Boolean) => {
+const evaluarSolicitud = async (solicitudId: string, aprobado: boolean) => {
   try {
     await apiEvaluarSolicitud({ solicitudId, aprobado })
     alert(aprobado ? '✅ Solicitud APROBADA.' : '🚫 Solicitud RECHAZADA.')
@@ -172,7 +291,7 @@ onMounted(() => {
           <h2 class="text-lg font-black tracking-tight">Vacaciones, Permisos e Incidencias</h2>
         </div>
 
-        <!-- 🏖️ TARJETA DÍAS DISPONIBLES DE VACACIONES -->
+        <!-- 🏖️ DÍAS DISPONIBLES DE VACACIONES -->
         <div :class="esModoOscuro ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-slate-200 shadow-sm'" class="border px-4 py-1.5 rounded-2xl flex items-center gap-3">
           <span class="text-xl">🏖️</span>
           <div class="text-left">
@@ -189,14 +308,14 @@ onMounted(() => {
           
           <form @submit.prevent="enviarFormulario" class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
             
-            <!-- COLUMNA IZQUIERDA: CALENDARIO INTERACTIVO -->
+            <!-- COLUMNA IZQUIERDA: CALENDARIO INTERACTIVO REAL -->
             <div class="lg:col-span-5 space-y-4 border-r pr-0 lg:pr-6" :class="esModoOscuro ? 'border-zinc-800' : 'border-slate-200/60'">
               <div class="flex justify-between items-center">
-                <h3 class="font-bold text-lg" :class="esModoOscuro ? 'text-white' : 'text-slate-800'">{{ mesActual }}</h3>
+                <h3 class="font-bold text-lg" :class="esModoOscuro ? 'text-white' : 'text-slate-800'">{{ mesAñoTexto }}</h3>
                 <div class="flex items-center gap-1">
-                  <button type="button" :class="esModoOscuro ? 'bg-zinc-800 hover:bg-zinc-700 text-zinc-300' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'" class="font-bold px-3 py-1 rounded-lg text-xs cursor-pointer">Hoy</button>
-                  <button type="button" :class="esModoOscuro ? 'bg-zinc-800 hover:bg-zinc-700 text-zinc-300' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'" class="font-bold px-2 py-1 rounded-lg text-xs cursor-pointer">❮</button>
-                  <button type="button" :class="esModoOscuro ? 'bg-zinc-800 hover:bg-zinc-700 text-zinc-300' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'" class="font-bold px-2 py-1 rounded-lg text-xs cursor-pointer">❯</button>
+                  <button type="button" @click="irAHoy" :class="esModoOscuro ? 'bg-zinc-800 hover:bg-zinc-700 text-zinc-300' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'" class="font-bold px-3 py-1 rounded-lg text-xs cursor-pointer">Hoy</button>
+                  <button type="button" @click="cambiarMes(-1)" :disabled="esMesActualOPasado" :class="[esMesActualOPasado ? 'opacity-30 cursor-not-allowed' : 'cursor-pointer', esModoOscuro ? 'bg-zinc-800 hover:bg-zinc-700 text-zinc-300' : 'bg-slate-100 hover:bg-slate-200 text-slate-700']" class="font-bold px-2.5 py-1 rounded-lg text-xs">❮</button>
+                  <button type="button" @click="cambiarMes(1)" :class="esModoOscuro ? 'bg-zinc-800 hover:bg-zinc-700 text-zinc-300' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'" class="font-bold px-2.5 py-1 rounded-lg text-xs cursor-pointer">❯</button>
                 </div>
               </div>
 
@@ -208,17 +327,21 @@ onMounted(() => {
               <!-- GRILLA DÍAS DEL MES -->
               <div class="grid grid-cols-7 gap-1 text-center text-xs font-semibold">
                 <div 
-                  v-for="(item, idx) in diasCalendario" 
+                  v-for="(item, idx) in diasDelMes" 
                   :key="idx" 
                   @click="seleccionarDia(item)"
                   :class="[
-                    item.otroMes ? (esModoOscuro ? 'text-zinc-700' : 'text-slate-300') : (esModoOscuro ? 'text-zinc-200 hover:bg-zinc-800 cursor-pointer' : 'text-slate-700 hover:bg-red-50 cursor-pointer'),
-                    item.seleccionado ? 'bg-red-700 text-white font-bold rounded-lg shadow-md hover:bg-red-800' : ''
+                    item.esPasado || !item.esMesActual ? 'opacity-25 cursor-not-allowed text-zinc-500' : (esModoOscuro ? 'text-zinc-200 hover:bg-zinc-800 cursor-pointer' : 'text-slate-700 hover:bg-red-50 cursor-pointer'),
+                    item.seleccionado ? 'bg-red-700! text-white! opacity-100! font-bold rounded-lg shadow-md' : ''
                   ]"
-                  class="py-2.5 transition-all"
+                  class="py-2.5 transition-all select-none"
                 >
                   {{ item.dia }}
                 </div>
+              </div>
+
+              <div v-if="fechasSeleccionadas.length > 0" class="text-[11px] font-mono text-zinc-400 text-left pt-2">
+                📌 Días seleccionados: <strong class="text-red-400">{{ fechasSeleccionadas.length }} día(s)</strong>
               </div>
             </div>
 
@@ -267,7 +390,7 @@ onMounted(() => {
 
               <!-- DÍAS -->
               <div>
-                <label class="text-xs font-bold block mb-1" :class="esModoOscuro ? 'text-zinc-400' : 'text-slate-700'">Días <span class="text-red-500">*</span></label>
+                <label class="text-xs font-bold block mb-1" :class="esModoOscuro ? 'text-zinc-400' : 'text-slate-700'">Días Solicitados <span class="text-red-500">*</span></label>
                 <input v-model.number="numDias" type="number" step="0.5" min="0.5" required :class="esModoOscuro ? 'bg-zinc-950 border-zinc-800 text-white' : 'bg-white border-slate-300 text-slate-800'" class="w-full p-3 text-xs rounded-xl border font-bold focus:outline-none" />
               </div>
 
@@ -279,7 +402,7 @@ onMounted(() => {
 
               <!-- BOTONES CONFIRMAR Y CANCELAR -->
               <div class="flex justify-end gap-3 pt-2">
-                <button type="button" @click="motivoSolicitud = ''" :class="esModoOscuro ? 'bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border-zinc-700' : 'bg-white hover:bg-slate-100 text-slate-600 border-slate-300'" class="font-bold text-xs px-6 py-2.5 rounded-xl border cursor-pointer transition">
+                <button type="button" @click="fechasSeleccionadas = []; motivoSolicitud = ''" :class="esModoOscuro ? 'bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border-zinc-700' : 'bg-white hover:bg-slate-100 text-slate-600 border-slate-300'" class="font-bold text-xs px-6 py-2.5 rounded-xl border cursor-pointer transition">
                   Cancelar
                 </button>
                 <button type="submit" :disabled="enviandoSolicitud" class="bg-red-700 hover:bg-red-800 text-white font-black text-xs px-8 py-2.5 rounded-xl shadow-md cursor-pointer disabled:opacity-50 transition">
