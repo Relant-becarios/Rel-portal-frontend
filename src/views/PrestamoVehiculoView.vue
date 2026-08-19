@@ -21,30 +21,9 @@ const guardandoSolicitud = ref(false)
 // Modal de Devolución
 const prestamoADevolver = ref<any | null>(null)
 const kmFinalDevolucion = ref<number | null>(null)
-const archivoFotoKmIniDevolucion = ref<File | null>(null)
 const archivoFotoKmFin = ref<File | null>(null)
 const observacionesDevolucion = ref('')
 const subiendoDevolucion = ref(false)
-
-// ⛽ ESTADO DE CARGA DE GASOLINA (MODAL DEVOLUCIÓN)
-const cargoGasolinaDevolucion = ref(false)
-const kmGasolinaDevolucion = ref<number | null>(null)
-const archivoFotoFacturaDevolucion = ref<File | null>(null)
-
-// ⛽ ESTADO DINÁMICO DE GASOLINA PARA TARJETAS EN LA BITÁCORA
-const gasStateMap = ref<Record<string, { activo: boolean; km: number | null; archivo: File | null; guardando: boolean }>>({})
-
-const getGasState = (prestamoId: string) => {
-  if (!gasStateMap.value[prestamoId]) {
-    gasStateMap.value[prestamoId] = {
-      activo: false,
-      km: null,
-      archivo: null,
-      guardando: false
-    }
-  }
-  return gasStateMap.value[prestamoId]
-}
 
 // Modal de Configuración de Mantenimiento
 const vehiculoAConfigurar = ref<any | null>(null)
@@ -54,18 +33,7 @@ const configUltimoServicioKm = ref(0)
 const guardandoConfig = ref(false)
 
 const inputKmIniRef = ref<HTMLInputElement | null>(null)
-const inputKmIniDevRef = ref<HTMLInputElement | null>(null)
 const inputKmFinRef = ref<HTMLInputElement | null>(null)
-const inputFacturaGasDevRef = ref<HTMLInputElement | null>(null)
-const fileInputsCardMap = ref<Record<string, HTMLInputElement | null>>({})
-
-const setFileInputCardRef = (prestamoId: string, el: any) => {
-  if (el) fileInputsCardMap.value[prestamoId] = el as HTMLInputElement
-}
-
-const triggerFileInputCard = (prestamoId: string) => {
-  fileInputsCardMap.value[prestamoId]?.click()
-}
 
 const toggleTema = () => {
   esModoOscuro.value = !esModoOscuro.value
@@ -142,10 +110,7 @@ const SOLICITAR_VEHICULO_MUTATION = gql`
     $fechaRecepcion: String!,
     $fechaEntregaEstimada: String!,
     $fotoKilometrajeIni: String,
-    $comentarios: String,
-    $cargoGasolina: Boolean,
-    $kmGasolina: Int,
-    $fotoFacturaGasolina: String
+    $comentarios: String
   ) {
     solicitarVehiculo(
       vehiculoId: $vehiculoId,
@@ -156,45 +121,25 @@ const SOLICITAR_VEHICULO_MUTATION = gql`
       fechaRecepcion: $fechaRecepcion,
       fechaEntregaEstimada: $fechaEntregaEstimada,
       fotoKilometrajeIni: $fotoKilometrajeIni,
-      comentarios: $comentarios,
-      cargoGasolina: $cargoGasolina,
-      kmGasolina: $kmGasolina,
-      fotoFacturaGasolina: $fotoFacturaGasolina
+      comentarios: $comentarios
     ) { id }
-  }
-`
-
-const REGISTRAR_CARGA_GASOLINA_MUTATION = gql`
-  mutation RegistrarCargaGasolina($prestamoId: String!, $kmGasolina: Int!, $fotoFacturaGasolina: String!) {
-    registrarCargaGasolina(prestamoId: $prestamoId, kmGasolina: $kmGasolina, fotoFacturaGasolina: $fotoFacturaGasolina) {
-      id
-      cargoGasolina
-      kmGasolina
-      fotoFacturaGasolina
-    }
   }
 `
 
 const FINALIZAR_PRESTAMO_MUTATION = gql`
   mutation FinalizarPrestamo(
-    $prestamoId: String!, 
-    $kilometrajeFinal: Int!, 
+    $prestamoId: String!,
+    $kilometrajeFinal: Int!,
     $fotoKilometrajeIni: String,
-    $fotoKilometrajeFin: String, 
-    $observaciones: String,
-    $cargoGasolina: Boolean,
-    $kmGasolina: Int,
-    $fotoFacturaGasolina: String
+    $fotoKilometrajeFin: String,
+    $observaciones: String
   ) {
     finalizarPrestamoVehiculo(
-      prestamoId: $prestamoId, 
-      kilometrajeFinal: $kilometrajeFinal, 
+      prestamoId: $prestamoId,
+      kilometrajeFinal: $kilometrajeFinal,
       fotoKilometrajeIni: $fotoKilometrajeIni,
-      fotoKilometrajeFin: $fotoKilometrajeFin, 
-      observaciones: $observaciones,
-      cargoGasolina: $cargoGasolina,
-      kmGasolina: $kmGasolina,
-      fotoFacturaGasolina: $fotoFacturaGasolina
+      fotoKilometrajeFin: $fotoKilometrajeFin,
+      observaciones: $observaciones
     ) { id }
   }
 `
@@ -240,7 +185,6 @@ const { result, loading, refetch } = useQuery(OBTENER_DATOS_VEHICULOS, null, {
 })
 
 const { mutate: apiSolicitar } = useMutation(SOLICITAR_VEHICULO_MUTATION)
-const { mutate: apiRegistrarGasolina } = useMutation(REGISTRAR_CARGA_GASOLINA_MUTATION)
 const { mutate: apiFinalizar } = useMutation(FINALIZAR_PRESTAMO_MUTATION)
 const { mutate: apiCancelar } = useMutation(CANCELAR_PRESTAMO_MUTATION)
 const { mutate: apiCambiarEstado } = useMutation(CAMBIAR_ESTADO_MUTATION)
@@ -254,12 +198,12 @@ const prestamos = computed(() => result.value?.obtenerPrestamosVehiculos || [])
 const esOwner = computed(() => result.value?.me?.rol === 'OWNER')
 const esAdminOJefe = computed(() => ['ADMIN', 'OWNER', 'JEFE'].includes(result.value?.me?.rol))
 
-const puedeEditarVehiculo = (_vehiculo: any) => {
-  return esOwner.value
-}
-
-const obtenerPrestamoActivo = (vehiculoId: string) => {
-  return prestamos.value.find((p: any) => p.vehiculo?.id === vehiculoId && p.estado === 'EN_CURSO')
+// REGLA: Si el vehículo está en MANTENIMIENTO, solo OWNER puede editarlo.
+const puedeEditarVehiculo = (vehiculo: any) => {
+  if (vehiculo.estado === 'MANTENIMIENTO') {
+    return esOwner.value
+  }
+  return esAdminOJefe.value
 }
 
 const vehiculoSeleccionadoObj = computed(() => {
@@ -271,55 +215,9 @@ const seleccionarFotoIni = (event: Event) => {
   if (target.files && target.files[0]) archivoFotoKmIni.value = target.files[0]
 }
 
-const seleccionarFotoIniDev = (event: Event) => {
-  const target = event.target as HTMLInputElement
-  if (target.files && target.files[0]) archivoFotoKmIniDevolucion.value = target.files[0]
-}
-
 const seleccionarFotoFin = (event: Event) => {
   const target = event.target as HTMLInputElement
   if (target.files && target.files[0]) archivoFotoKmFin.value = target.files[0]
-}
-
-const seleccionarFotoFacturaDev = (event: Event) => {
-  const target = event.target as HTMLInputElement
-  if (target.files && target.files[0]) archivoFotoFacturaDevolucion.value = target.files[0]
-}
-
-const seleccionarFotoGasCard = (event: Event, prestamoId: string) => {
-  const target = event.target as HTMLInputElement
-  if (target.files && target.files[0]) {
-    getGasState(prestamoId).archivo = target.files[0]
-  }
-}
-
-const guardarGasolinaCard = async (prestamoId: string) => {
-  const st = getGasState(prestamoId)
-  if (!st.km) {
-    alert('❌ Ingresa el kilometraje al momento de cargar gasolina.')
-    return
-  }
-  if (!st.archivo) {
-    alert('❌ Es obligatorio adjuntar la foto del ticket / factura de gasolina.')
-    return
-  }
-
-  st.guardando = true
-  try {
-    const urlFactura = await subirACloudinary(st.archivo)
-    await apiRegistrarGasolina({
-      prestamoId,
-      kmGasolina: Number(st.km),
-      fotoFacturaGasolina: urlFactura
-    })
-    alert('⛽ Carga de gasolina registrada correctamente en la reserva.')
-    st.activo = false
-    refetch()
-  } catch (err: any) {
-    alert('Error al registrar gasolina: ' + err.message)
-  } finally {
-    st.guardando = false
-  }
 }
 
 const cambiarEstadoManual = async (vehiculoId: string, nuevoEstado: string) => {
@@ -360,10 +258,10 @@ const guardarConfiguracionMantenimiento = async () => {
   }
 }
 
-// 🚫 CANCELAR RESERVA
+// 🚫 ACCIÓN PARA CANCELAR RESERVA POR ID
 const cancelarReserva = async (prestamoId: string) => {
   const motivo = prompt('¿Motivo de la cancelación de la reserva? (Opcional)')
-  if (motivo === null) return;
+  if (motivo === null) return
 
   try {
     await apiCancelar({ prestamoId, motivo: motivo.trim() || null })
@@ -374,7 +272,17 @@ const cancelarReserva = async (prestamoId: string) => {
   }
 }
 
-// 🔒 REGISTRAR SALIDA DE AUTO
+// 🚫 CANCELAR RESERVA DIRECTAMENTE DESDE LA TARJETA DEL AUTO EN_USO
+const cancelarReservaPorVehiculo = async (vehiculoId: string) => {
+  const prestamoActivo = prestamos.value.find((p: any) => p.vehiculo?.id === vehiculoId && p.estado === 'EN_CURSO')
+  if (prestamoActivo) {
+    await cancelarReserva(prestamoActivo.id)
+  } else {
+    alert('No se encontró un registro activo de préstamo en curso para este vehículo.')
+  }
+}
+
+// 🔒 VALIDACIÓN ESTRICTA DEL FORMULARIO
 const enviarSolicitud = async () => {
   if (!vehiculoSeleccionadoId.value) {
     alert('❌ Debes seleccionar un vehículo de la lista.')
@@ -396,13 +304,14 @@ const enviarSolicitud = async () => {
     alert('❌ Especifica qué material o carga vas a transportar.')
     return
   }
+  if (!archivoFotoKmIni.value) {
+    alert('❌ Es obligatorio adjuntar la foto del odómetro / kilometraje inicial.')
+    return
+  }
 
   guardandoSolicitud.value = true
   try {
-    let urlFotoKm: string | null = null
-    if (archivoFotoKmIni.value) {
-      urlFotoKm = await subirACloudinary(archivoFotoKmIni.value)
-    }
+    const urlFotoKm = await subirACloudinary(archivoFotoKmIni.value)
 
     await apiSolicitar({
       vehiculoId: vehiculoSeleccionadoId.value,
@@ -413,10 +322,7 @@ const enviarSolicitud = async () => {
       fechaRecepcion: fechaRecepcion.value,
       fechaEntregaEstimada: fechaEntregaEstimada.value,
       fotoKilometrajeIni: urlFotoKm,
-      comentarios: comentariosOpcionales.value.trim() || null,
-      cargoGasolina: false,
-      kmGasolina: null,
-      fotoFacturaGasolina: null
+      comentarios: comentariosOpcionales.value.trim() || null
     })
 
     alert('✅ Registro diario asignado correctamente.')
@@ -437,68 +343,32 @@ const enviarSolicitud = async () => {
   }
 }
 
-// 🔑 FINALIZAR PRÉSTAMO
 const procesarDevolucion = async () => {
   if (!prestamoADevolver.value || !kmFinalDevolucion.value) {
     alert('❌ Ingresa el kilometraje final.')
     return
   }
-
-  const faltaFotoInicial = !prestamoADevolver.value?.fotoKilometrajeIni
-
-  if (faltaFotoInicial && !archivoFotoKmIniDevolucion.value && !archivoFotoKmFin.value) {
-    alert('❌ Como faltaba la foto inicial, debes adjuntar al menos una foto del odómetro (Inicial o Final) para cerrar la devolución.')
+  if (!archivoFotoKmFin.value) {
+    alert('❌ Es obligatorio adjuntar la foto del odómetro final.')
     return
-  }
-
-  if (cargoGasolinaDevolucion.value) {
-    if (!kmGasolinaDevolucion.value) {
-      alert('❌ Ingresa el kilometraje al momento de cargar gasolina.')
-      return
-    }
-    if (!archivoFotoFacturaDevolucion.value && !prestamoADevolver.value?.fotoFacturaGasolina) {
-      alert('❌ Es obligatorio adjuntar la foto del ticket / factura de gasolina.')
-      return
-    }
   }
 
   subiendoDevolucion.value = true
   try {
-    let urlFotoIni: string | null = null
-    if (archivoFotoKmIniDevolucion.value) {
-      urlFotoIni = await subirACloudinary(archivoFotoKmIniDevolucion.value)
-    }
-
-    let urlFotoFin: string | null = null
-    if (archivoFotoKmFin.value) {
-      urlFotoFin = await subirACloudinary(archivoFotoKmFin.value)
-    }
-
-    let urlFacturaDev: string | null = null
-    if (cargoGasolinaDevolucion.value && archivoFotoFacturaDevolucion.value) {
-      urlFacturaDev = await subirACloudinary(archivoFotoFacturaDevolucion.value)
-    }
+    const urlFotoFin = await subirACloudinary(archivoFotoKmFin.value)
 
     await apiFinalizar({
       prestamoId: prestamoADevolver.value.id,
       kilometrajeFinal: Number(kmFinalDevolucion.value),
-      fotoKilometrajeIni: urlFotoIni,
       fotoKilometrajeFin: urlFotoFin,
-      observaciones: observacionesDevolucion.value.trim() || null,
-      cargoGasolina: cargoGasolinaDevolucion.value || prestamoADevolver.value?.cargoGasolina,
-      kmGasolina: cargoGasolinaDevolucion.value ? Number(kmGasolinaDevolucion.value) : prestamoADevolver.value?.kmGasolina,
-      fotoFacturaGasolina: urlFacturaDev || prestamoADevolver.value?.fotoFacturaGasolina
+      observaciones: observacionesDevolucion.value.trim() || null
     })
 
     alert('🏁 Devolución registrada y validada.')
     prestamoADevolver.value = null
     kmFinalDevolucion.value = null
     observacionesDevolucion.value = ''
-    archivoFotoKmIniDevolucion.value = null
     archivoFotoKmFin.value = null
-    cargoGasolinaDevolucion.value = false
-    kmGasolinaDevolucion.value = null
-    archivoFotoFacturaDevolucion.value = null
     refetch()
   } catch (err: any) {
     alert('Error en devolución: ' + err.message)
@@ -566,6 +436,7 @@ onMounted(() => {
                   <span class="text-[10px] font-mono bg-zinc-800 text-zinc-300 px-2 py-0.5 rounded border border-zinc-700">Placas: {{ v.placas }}</span>
                 </div>
 
+                <!-- 🔽 SELECTOR DE ESTADO: SOLO OWNER SI ESTÁ EN MANTENIMIENTO -->
                 <select 
                   v-if="puedeEditarVehiculo(v)"
                   :value="v.estado"
@@ -576,10 +447,10 @@ onMounted(() => {
                     'bg-amber-950/80 text-amber-400 border-amber-500/50': v.estado === 'EN_USO',
                     'bg-red-950/80 text-red-400 border-red-500/50': v.estado === 'MANTENIMIENTO'
                   }"
-                  class="text-[10px] font-bold uppercase px-3 py-1 rounded-lg border cursor-pointer focus:outline-none appearance-none pr-7 relative bg-[url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%23FFFFFF%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E')] bg-size-[9px_9px] bg-position-[right_8px_center] bg-no-repeat"
+                  class="text-[10px] font-bold uppercase px-3 py-1 rounded-lg border cursor-pointer focus:outline-none appearance-none pr-7 relative bg-[url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%23FFFFFF%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E')] bg-[length:9px_9px] bg-[right_8px_center] bg-no-repeat"
                 >
                   <option value="DISPONIBLE" class="bg-zinc-900 text-emerald-400 font-bold">DISPONIBLE</option>
-                  <option value="EN_USO" class="bg-zinc-900 text-amber-400 font-bold">RESERVADO</option>
+                  <option value="EN_USO" class="bg-zinc-900 text-amber-400 font-bold">EN_USO</option>
                   <option value="MANTENIMIENTO" class="bg-zinc-900 text-red-400 font-bold">MANTENIMIENTO</option>
                 </select>
 
@@ -592,7 +463,7 @@ onMounted(() => {
                   }"
                   class="text-[9px] font-bold uppercase px-2 py-0.5 rounded-md border"
                 >
-                  {{ v.estado === 'EN_USO' ? 'RESERVADO' : v.estado }}
+                  {{ v.estado }}
                 </span>
               </div>
 
@@ -625,11 +496,11 @@ onMounted(() => {
                 </div>
               </div>
 
-              <!-- SOLO SE MUESTRA SI REALMENTE TIENE UN PRÉSTAMO EN CURSO -->
-              <div v-if="obtenerPrestamoActivo(v.id)" class="pt-2 border-t border-zinc-800/60 flex justify-between items-center">
-                <span class="text-[10px] text-amber-400 font-bold">🚗 Vehículo reservado</span>
+              <!-- 🚫 CANCELACIÓN DIRECTA SI ESTÁ EN_USO -->
+              <div v-if="v.estado === 'EN_USO'" class="pt-2 border-t border-zinc-800/60 flex justify-between items-center">
+                <span class="text-[10px] text-amber-400 font-bold">🚗 Vehículo en uso</span>
                 <button 
-                  @click.stop="obtenerPrestamoActivo(v.id) && cancelarReserva(obtenerPrestamoActivo(v.id)!.id)" 
+                  @click.stop="cancelarReservaPorVehiculo(v.id)" 
                   class="bg-red-950/80 hover:bg-red-900 border border-red-800 text-red-300 font-bold text-[10px] px-3 py-1 rounded-lg cursor-pointer transition"
                 >
                   🚫 Cancelar Reserva
@@ -695,21 +566,19 @@ onMounted(() => {
               <div>
                 <label class="text-xs font-bold uppercase text-zinc-400 block mb-1">Fecha / Hora Salida: *</label>
                 <input v-model="fechaRecepcion" type="datetime-local" required :class="esModoOscuro ? 'bg-zinc-950 border-zinc-800 text-white' : 'bg-slate-100 border-slate-300 text-slate-900'" class="w-full p-3 text-xs rounded-xl border focus:outline-none font-mono" />
-                <p class="text-[10px] text-zinc-500 mt-1 font-mono">💡 Formato: Fecha y Hora (Ej. 10:30 a.m. / p.m.)</p>
               </div>
 
               <div>
                 <label class="text-xs font-bold uppercase text-zinc-400 block mb-1">Fecha / Hora Estimada Entrega: *</label>
                 <input v-model="fechaEntregaEstimada" type="datetime-local" required :class="esModoOscuro ? 'bg-zinc-950 border-zinc-800 text-white' : 'bg-slate-100 border-slate-300 text-slate-900'" class="w-full p-3 text-xs rounded-xl border focus:outline-none font-mono" />
-                <p class="text-[10px] text-zinc-500 mt-1 font-mono">💡 Formato: Fecha y Hora (Ej. 10:30 a.m. / p.m.)</p>
               </div>
             </div>
 
             <div>
-              <label class="text-xs font-bold uppercase text-zinc-400 block mb-1">📷 Foto del Odómetro / Kilometraje Inicial (Opcional):</label>
+              <label class="text-xs font-bold uppercase text-zinc-400 block mb-1">📷 Foto del Odómetro / Kilometraje Inicial: *</label>
               <input type="file" ref="inputKmIniRef" accept="image/*" class="hidden" @change="seleccionarFotoIni" />
               <button type="button" @click="inputKmIniRef?.click()" :class="archivoFotoKmIni ? 'bg-emerald-800/80 border-emerald-600 text-white' : 'bg-zinc-800 hover:bg-zinc-700 text-white'" class="text-xs font-bold px-4 py-2.5 rounded-xl cursor-pointer border transition-all">
-                {{ archivoFotoKmIni ? `✅ Foto lista: ${archivoFotoKmIni.name}` : '📷 Capturar/Adjuntar Foto del Odómetro (Opcional)' }}
+                {{ archivoFotoKmIni ? `✅ Foto lista: ${archivoFotoKmIni.name}` : '📷 Capturar/Adjuntar Foto del Odómetro (Obligatorio)' }}
               </button>
             </div>
 
@@ -720,7 +589,7 @@ onMounted(() => {
 
             <div class="flex justify-end pt-2">
               <button type="submit" :disabled="guardandoSolicitud" class="bg-red-700 hover:bg-red-800 text-white font-black text-xs uppercase tracking-widest px-8 py-3 rounded-xl cursor-pointer shadow-md disabled:opacity-50">
-                {{ guardandoSolicitud ? '⏳ Subiendo datos...' : 'Registrar Salida de Auto' }}
+                {{ guardandoSolicitud ? '⏳ Subiendo foto y guardando...' : 'Registrar Salida de Auto' }}
               </button>
             </div>
           </form>
@@ -731,120 +600,59 @@ onMounted(() => {
           <h3 class="text-xs font-black uppercase tracking-wider text-zinc-400">📋 Bitácora de Registro y Devolución</h3>
 
           <div class="space-y-3">
-            <div v-for="p in prestamos" :key="p.id" :class="esModoOscuro ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-slate-200 shadow-sm'" class="rounded-2xl border p-5 flex flex-col space-y-4">
-              <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                <div class="space-y-1 min-w-0">
-                  <div class="flex items-center gap-2">
-                    <span class="font-black text-sm">{{ p.vehiculo?.nombre }} ({{ p.vehiculo?.placas }})</span>
-                    <span 
-                      :class="{
-                        'bg-amber-500/20 text-amber-400 border-amber-500/30': p.estado === 'EN_CURSO',
-                        'bg-emerald-500/20 text-emerald-400 border-emerald-500/30': p.estado === 'FINALIZADO',
-                        'bg-red-500/20 text-red-400 border-red-500/30': p.estado === 'RECHAZADO'
-                      }"
-                      class="text-[10px] font-bold px-2 py-0.5 rounded uppercase border"
-                    >
-                      {{ p.estado === 'RECHAZADO' ? 'CANCELADO' : p.estado }}
-                    </span>
-                  </div>
-                  <p class="text-xs text-zinc-400">👤 Operador: <strong class="text-white">{{ p.solicitante?.nombre }}</strong> | Justificación: {{ p.justificacion }}</p>
-                  <div class="text-[11px] font-mono text-zinc-500 pt-1">
-                    📅 Salida: {{ p.fechaRecepcion }} ➡️ Entrega Est: {{ p.fechaEntregaEstimada }}
-                  </div>
-                  <div v-if="p.comentarios" class="text-[11px] italic text-zinc-400 pt-0.5">
-                    💬 Comentario: {{ p.comentarios }}
-                  </div>
-                  <div v-if="p.observacionesDev" class="text-[11px] font-mono text-amber-400 pt-0.5">
-                    📝 Nota Cierre / Cancelación: {{ p.observacionesDev }}
-                  </div>
-
-                  <div class="flex flex-wrap gap-2 pt-2 text-[11px] font-bold">
-                    <a v-if="p.fotoKilometrajeIni" :href="p.fotoKilometrajeIni" target="_blank" class="text-red-400 hover:text-red-300 underline flex items-center gap-1 bg-red-950/40 border border-red-800/50 px-2.5 py-1 rounded-lg">
-                      📷 Ver Foto Odómetro Inicial ↗
-                    </a>
-                    <a v-if="p.fotoKilometrajeFin" :href="p.fotoKilometrajeFin" target="_blank" class="text-emerald-400 hover:text-emerald-300 underline flex items-center gap-1 bg-emerald-950/40 border border-emerald-800/50 px-2.5 py-1 rounded-lg">
-                      📷 Ver Foto Odómetro Final ↗
-                    </a>
-                    <a v-if="p.fotoFacturaGasolina" :href="p.fotoFacturaGasolina" target="_blank" class="text-amber-400 hover:text-amber-300 underline flex items-center gap-1 bg-amber-950/40 border border-amber-800/50 px-2.5 py-1 rounded-lg">
-                      ⛽ Ver Factura Gasolina (Km: {{ p.kmGasolina || 'Sin datos' }}) ↗
-                    </a>
-                  </div>
-                </div>
-
-                <div v-if="p.estado === 'EN_CURSO'" class="shrink-0 flex flex-col sm:flex-row gap-2">
-                  <button @click="prestamoADevolver = p" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-4 py-2.5 rounded-xl cursor-pointer transition">
-                    🔑 Devolver / Foto Km
-                  </button>
-                  <button 
-                    v-if="p.solicitanteId === result?.me?.id || esAdminOJefe" 
-                    @click="cancelarReserva(p.id)" 
-                    class="bg-red-950/80 hover:bg-red-900 border border-red-800 text-red-300 font-bold text-xs px-4 py-2.5 rounded-xl cursor-pointer transition"
+            <div v-for="p in prestamos" :key="p.id" :class="esModoOscuro ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-slate-200 shadow-sm'" class="rounded-2xl border p-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div class="space-y-1 min-w-0">
+                <div class="flex items-center gap-2">
+                  <span class="font-black text-sm">{{ p.vehiculo?.nombre }} ({{ p.vehiculo?.placas }})</span>
+                  <span 
+                    :class="{
+                      'bg-amber-500/20 text-amber-400 border-amber-500/30': p.estado === 'EN_CURSO',
+                      'bg-emerald-500/20 text-emerald-400 border-emerald-500/30': p.estado === 'FINALIZADO',
+                      'bg-red-500/20 text-red-400 border-red-500/30': p.estado === 'RECHAZADO'
+                    }"
+                    class="text-[10px] font-bold px-2 py-0.5 rounded uppercase border"
                   >
-                    🚫 Cancelar Reserva
-                  </button>
+                    {{ p.estado === 'RECHAZADO' ? 'CANCELADO' : p.estado }}
+                  </span>
+                </div>
+                <p class="text-xs text-zinc-400">👤 Operador: <strong class="text-white">{{ p.solicitante?.nombre }}</strong> | Justificación: {{ p.justificacion }}</p>
+                <div class="text-[11px] font-mono text-zinc-500 pt-1">
+                  📅 Salida: {{ p.fechaRecepcion }} ➡️ Entrega Est: {{ p.fechaEntregaEstimada }}
+                </div>
+                <div v-if="p.comentarios" class="text-[11px] italic text-zinc-400 pt-0.5">
+                  💬 Comentario: {{ p.comentarios }}
+                </div>
+                <div v-if="p.observacionesDev" class="text-[11px] font-mono text-amber-400 pt-0.5">
+                  📝 Nota Cierre / Cancelación: {{ p.observacionesDev }}
+                </div>
+
+                <!-- 📷 EVIDENCIAS EN FOTO -->
+                <div class="flex flex-wrap gap-2 pt-2 text-[11px] font-bold">
+                  <a v-if="p.fotoKilometrajeIni" :href="p.fotoKilometrajeIni" target="_blank" class="text-red-400 hover:text-red-300 underline flex items-center gap-1 bg-red-950/40 border border-red-800/50 px-2.5 py-1 rounded-lg">
+                    📷 Ver Foto Odómetro Inicial ↗
+                  </a>
+                  <a v-if="p.fotoKilometrajeFin" :href="p.fotoKilometrajeFin" target="_blank" class="text-emerald-400 hover:text-emerald-300 underline flex items-center gap-1 bg-emerald-950/40 border border-emerald-800/50 px-2.5 py-1 rounded-lg">
+                    📷 Ver Foto Odómetro Final ↗
+                  </a>
+                  <a v-if="p.fotoFacturaGasolina" :href="p.fotoFacturaGasolina" target="_blank" class="text-amber-400 hover:text-amber-300 underline flex items-center gap-1 bg-amber-950/40 border border-amber-800/50 px-2.5 py-1 rounded-lg">
+                    ⛽ Ver Ticket Gasolina ↗
+                  </a>
                 </div>
               </div>
 
-              <!-- ⛽ MÓDULO EXPANDIBLE DE CARGA DE GASOLINA DIRECTO EN TARJETA ABIERTA (EN_CURSO) -->
-              <div v-if="p.estado === 'EN_CURSO' && !p.fotoFacturaGasolina" class="p-4 rounded-2xl bg-zinc-950/60 border border-zinc-800/80 space-y-3 text-left">
-                <div class="flex items-center gap-3">
-                  <input 
-                    type="checkbox" 
-                    :id="'gas_check_' + p.id" 
-                    v-model="getGasState(p.id).activo" 
-                    class="w-4 h-4 accent-red-600 rounded cursor-pointer" 
-                  />
-                  <label :for="'gas_check_' + p.id" class="text-xs font-bold cursor-pointer text-white">
-                    ⛽ ¿Realizó carga de gasolina durante la reserva?
-                  </label>
-                </div>
-
-                <div v-if="getGasState(p.id).activo" class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
-                  <div>
-                    <label class="text-[10px] font-bold uppercase text-zinc-400 block mb-1">
-                      Kilometraje al cargar gasolina: *
-                    </label>
-                    <input 
-                      v-model.number="getGasState(p.id).km" 
-                      type="number" 
-                      placeholder="Ej. 45150" 
-                      class="w-full p-2.5 text-xs rounded-xl border bg-zinc-900 border-zinc-800 text-white font-mono font-bold focus:outline-none" 
-                    />
-                  </div>
-
-                  <div>
-                    <label class="text-[10px] font-bold uppercase text-zinc-400 block mb-1">
-                      📷 Foto Factura / Ticket de Gasolina: *
-                    </label>
-                    <input 
-                      type="file" 
-                      :ref="(el) => setFileInputCardRef(p.id, el)" 
-                      accept="image/*" 
-                      class="hidden" 
-                      @change="(e) => seleccionarFotoGasCard(e, p.id)" 
-                    />
-                    <button 
-  type="button" 
-  @click="triggerFileInputCard(p.id)" 
-  :class="getGasState(p.id).archivo ? 'bg-emerald-800/80 border-emerald-600 text-white' : 'bg-zinc-800 hover:bg-zinc-700 text-white'" 
-  class="text-xs font-bold px-4 py-2.5 rounded-xl cursor-pointer w-full border transition-all"
->
-  {{ getGasState(p.id).archivo ? `✅ ${getGasState(p.id).archivo?.name}` : '📷 Adjuntar Factura / Ticket' }}
-</button>
-                  </div>
-
-                  <div class="col-span-1 sm:col-span-2 flex justify-end pt-1">
-                    <button 
-                      @click="guardarGasolinaCard(p.id)" 
-                      :disabled="getGasState(p.id).guardando" 
-                      class="bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs px-4 py-2 rounded-xl transition cursor-pointer disabled:opacity-50"
-                    >
-                      {{ getGasState(p.id).guardando ? '⏳ Guardando Carga...' : '💾 Guardar Carga de Gasolina' }}
-                    </button>
-                  </div>
-                </div>
+              <!-- BOTONES DE ACCIÓN PARA PRÉSTAMOS EN CURSO -->
+              <div v-if="p.estado === 'EN_CURSO'" class="shrink-0 flex flex-col sm:flex-row gap-2">
+                <button @click="prestamoADevolver = p" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-4 py-2.5 rounded-xl cursor-pointer transition">
+                  🔑 Devolver / Foto Km
+                </button>
+                <button 
+                  v-if="p.solicitanteId === result?.me?.id || esOwner" 
+                  @click="cancelarReserva(p.id)" 
+                  class="bg-red-950/80 hover:bg-red-900 border border-red-800 text-red-300 font-bold text-xs px-4 py-2.5 rounded-xl cursor-pointer transition"
+                >
+                  🚫 Cancelar Reserva
+                </button>
               </div>
-
             </div>
           </div>
         </section>
@@ -860,7 +668,7 @@ onMounted(() => {
             <label class="text-xs font-bold uppercase text-zinc-400 block mb-1">Estado del Auto:</label>
             <select v-model="configEstado" :class="esModoOscuro ? 'bg-zinc-950 border-zinc-800 text-white' : 'bg-slate-100 border-slate-300 text-slate-900'" class="w-full p-3 text-xs rounded-xl border focus:outline-none font-bold">
               <option value="DISPONIBLE">DISPONIBLE</option>
-              <option value="EN_USO">RESERVADO</option>
+              <option value="EN_USO">EN_USO</option>
               <option value="MANTENIMIENTO">MANTENIMIENTO</option>
             </select>
           </div>
@@ -882,65 +690,26 @@ onMounted(() => {
             <button @click="guardarConfiguracionMantenimiento" :disabled="guardandoConfig" class="bg-red-700 hover:bg-red-800 text-white font-black text-xs uppercase px-6 py-2.5 rounded-xl cursor-pointer disabled:opacity-50">
               {{ guardandoConfig ? '⏳ Guardando...' : 'Guardar Ajustes' }}
             </button>
-            
           </div>
         </div>
       </div>
 
-      <!-- 🔑 MODAL DE DEVOLUCIÓN / KILOMETRAJE FINAL -->
+      <!-- 🔑 MODAL DE REGISTRO KILOMETRAJE FINAL -->
       <div v-if="prestamoADevolver" class="fixed inset-0 bg-zinc-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
-        <div :class="esModoOscuro ? 'bg-zinc-900 border-zinc-800 text-white' : 'bg-white border-slate-200 text-slate-800'" class="border rounded-3xl p-6 max-w-md w-full shadow-2xl space-y-4 text-left max-h-[90vh] overflow-y-auto">
+        <div :class="esModoOscuro ? 'bg-zinc-900 border-zinc-800 text-white' : 'bg-white border-slate-200 text-slate-800'" class="border rounded-3xl p-6 max-w-md w-full shadow-2xl space-y-4 text-left">
           <h3 class="text-lg font-black">Devolución de Vehículo</h3>
-          <p class="text-xs text-zinc-400">Ingresa el kilometraje final y sube las fotos correspondientes.</p>
+          <p class="text-xs text-zinc-400">Ingresa el kilometraje final y sube la foto del tablero.</p>
 
           <div>
             <label class="text-xs font-bold uppercase text-zinc-400 block mb-1">Kilometraje Final Odómetro: *</label>
             <input v-model.number="kmFinalDevolucion" type="number" required placeholder="Ej. 45200" :class="esModoOscuro ? 'bg-zinc-950 border-zinc-800 text-white' : 'bg-slate-100 border-slate-300 text-slate-900'" class="w-full p-3 text-sm rounded-xl border focus:outline-none font-bold font-mono" />
           </div>
 
-          <!-- BOTÓN PARA FOTO INICIAL FALTANTE -->
-          <div v-if="prestamoADevolver && !prestamoADevolver.fotoKilometrajeIni" class="p-3 bg-amber-950/40 border border-amber-800/60 rounded-2xl space-y-2">
-            <label class="text-xs font-bold uppercase text-amber-400 block">
-              ⚠️ Foto Odómetro Inicial Pendiente (Faltante):
-            </label>
-            <p class="text-[10px] text-amber-300/80">No se adjuntó foto al salir. Puedes subirla ahora:</p>
-            <input type="file" ref="inputKmIniDevRef" accept="image/*" class="hidden" @change="seleccionarFotoIniDev" />
-            <button type="button" @click="inputKmIniDevRef?.click()" :class="archivoFotoKmIniDevolucion ? 'bg-emerald-800/80 border-emerald-600 text-white' : 'bg-amber-900/80 hover:bg-amber-800 text-amber-100 border-amber-700'" class="text-xs font-bold px-4 py-2.5 rounded-xl cursor-pointer w-full border transition-all">
-              {{ archivoFotoKmIniDevolucion ? `✅ Foto Inicial Cargada: ${archivoFotoKmIniDevolucion.name}` : '📷 Subir Foto Odómetro Inicial (Faltante)' }}
-            </button>
-          </div>
-
-          <!-- ⛽ CARGA DE GASOLINA EN DEVOLUCIÓN -->
-          <div class="p-3 bg-zinc-950/60 border border-zinc-800/80 rounded-2xl space-y-2">
-            <div class="flex items-center gap-3">
-              <input v-model="cargoGasolinaDevolucion" type="checkbox" id="checkGasDev" class="w-4 h-4 accent-red-600 rounded cursor-pointer" />
-              <label for="checkGasDev" class="text-xs font-bold cursor-pointer">⛽ ¿Cargaste gasolina durante el viaje?</label>
-            </div>
-
-            <div v-if="cargoGasolinaDevolucion" class="space-y-3 pt-2">
-              <div>
-                <label class="text-[10px] font-bold uppercase text-zinc-400 block mb-1">Kilometraje al cargar gasolina: *</label>
-                <input v-model.number="kmGasolinaDevolucion" type="number" placeholder="Ej. 45150" :class="esModoOscuro ? 'bg-zinc-900 border-zinc-800 text-white' : 'bg-white border-slate-300 text-slate-800'" class="w-full p-2.5 text-xs rounded-xl border focus:outline-none font-mono font-bold" />
-              </div>
-
-              <div>
-                <label class="text-[10px] font-bold uppercase text-zinc-400 block mb-1">📷 Foto de Factura / Ticket de Gasolina: *</label>
-                <input type="file" ref="inputFacturaGasDevRef" accept="image/*" class="hidden" @change="seleccionarFotoFacturaDev" />
-                <button type="button" @click="inputFacturaGasDevRef?.click()" :class="archivoFotoFacturaDevolucion ? 'bg-emerald-800/80 border-emerald-600 text-white' : 'bg-zinc-800 hover:bg-zinc-700 text-white'" class="text-xs font-bold px-4 py-2.5 rounded-xl cursor-pointer w-full border transition-all">
-                  {{ archivoFotoFacturaDevolucion ? `✅ Factura: ${archivoFotoFacturaDevolucion.name}` : '📷 Adjuntar Factura / Ticket de Gasolina' }}
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <!-- FOTO ODÓMETRO FINAL -->
           <div>
-            <label class="text-xs font-bold uppercase text-zinc-400 block mb-1">
-              📷 Foto del Odómetro Final:
-            </label>
+            <label class="text-xs font-bold uppercase text-zinc-400 block mb-1">📷 Foto del Odómetro Final: *</label>
             <input type="file" ref="inputKmFinRef" accept="image/*" class="hidden" @change="seleccionarFotoFin" />
             <button type="button" @click="inputKmFinRef?.click()" :class="archivoFotoKmFin ? 'bg-emerald-800/80 border-emerald-600 text-white' : 'bg-zinc-800 hover:bg-zinc-700 text-white'" class="text-xs font-bold px-4 py-2.5 rounded-xl cursor-pointer w-full border transition-all">
-              {{ archivoFotoKmFin ? `✅ Foto Final Cargada: ${archivoFotoKmFin.name}` : '📷 Adjuntar Foto Odómetro Final' }}
+              {{ archivoFotoKmFin ? `✅ Foto cargada: ${archivoFotoKmFin.name}` : '📷 Adjuntar Foto del Odómetro Final (Obligatorio)' }}
             </button>
           </div>
 
