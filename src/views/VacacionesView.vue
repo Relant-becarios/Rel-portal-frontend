@@ -130,6 +130,7 @@ const OBTENER_VACACIONES_DATOS = gql`
       fechaInicio
       fechaFin
       motivo
+      comentarioEvaluador
       estado
       fechaSolicitud
       solicitante { id nombre email diasVacaciones }
@@ -163,10 +164,11 @@ const CREAR_SOLICITUD_MUTATION = gql`
 `
 
 const EVALUAR_SOLICITUD_MUTATION = gql`
-  mutation EvaluarSolicitudPermiso($solicitudId: String!, $aprobado: Boolean!) {
-    evaluarSolicitudPermiso(solicitudId: $solicitudId, aprobado: $aprobado) {
+  mutation EvaluarSolicitudPermiso($solicitudId: String!, $aprobado: Boolean!, $comentario: String) {
+    evaluarSolicitudPermiso(solicitudId: $solicitudId, aprobado: $aprobado, comentario: $comentario) {
       id
       estado
+      comentarioEvaluador
     }
   }
 `
@@ -182,9 +184,9 @@ const { mutate: apiEvaluarSolicitud } = useMutation(EVALUAR_SOLICITUD_MUTATION)
 const usuarioActual = computed(() => result.value?.me)
 const solicitudes = computed(() => result.value?.obtenerSolicitudesPermisos || [])
 
-const esAdminOJefe = computed(() => {
+const puedeEvaluarPermisos = computed(() => {
   const rol = usuarioActual.value?.rol
-  return ['ADMIN', 'OWNER', 'JEFE'].includes(rol)
+  return ['OWNER', 'JEFE', 'RH'].includes(rol)
 })
 
 // Selección controlada de días por saldo de vacaciones
@@ -265,8 +267,22 @@ const enviarFormulario = async () => {
 }
 
 const evaluarSolicitud = async (solicitudId: string, aprobado: boolean) => {
+  let comentario: string | null = null
+
+  if (!aprobado) {
+    const motivo = prompt('Por favor ingresa la razón / motivo del rechazo:')
+    if (motivo === null) return // Cancelado por el usuario
+    if (!motivo.trim()) {
+      alert('❌ Es obligatorio ingresar la razón del rechazo.')
+      return
+    }
+    comentario = motivo.trim()
+  } else {
+    if (!confirm('¿Confirmas que deseas APROBAR esta solicitud?')) return
+  }
+
   try {
-    await apiEvaluarSolicitud({ solicitudId, aprobado })
+    await apiEvaluarSolicitud({ solicitudId, aprobado, comentario })
     alert(aprobado ? '✅ Solicitud APROBADA.' : '🚫 Solicitud RECHAZADA.')
     refetch()
   } catch (err: any) {
@@ -415,51 +431,56 @@ onMounted(() => {
           </form>
         </section>
 
-        <!-- 📋 BITÁCORA Y EVALUACIÓN DE SOLICITUDES -->
-        <section class="space-y-4 text-left">
-          <h3 class="text-xs font-black uppercase tracking-wider text-zinc-400">📋 Solicitudes e Historial de Permisos</h3>
+       <!-- 📋 BITÁCORA Y EVALUACIÓN DE SOLICITUDES -->
+<section class="space-y-4 text-left">
+  <h3 class="text-xs font-black uppercase tracking-wider text-zinc-400">📋 Solicitudes e Historial de Permisos</h3>
 
-          <div v-if="loading" class="text-xs text-zinc-500 animate-pulse">Cargando solicitudes...</div>
-          <div v-else class="space-y-3">
-            <div 
-              v-for="s in solicitudes" 
-              :key="s.id" 
-              :class="esModoOscuro ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-slate-200 shadow-sm'" 
-              class="rounded-2xl border p-5 flex flex-col md:flex-row md:items-center justify-between gap-4"
-            >
-              <div class="space-y-1 text-left">
-                <div class="flex items-center gap-2">
-                  <span class="font-black text-sm">{{ s.categoria }} ({{ s.tipoPermiso }})</span>
-                  <span 
-                    :class="{
-                      'bg-amber-500/20 text-amber-400 border-amber-500/30': s.estado === 'PENDIENTE',
-                      'bg-emerald-500/20 text-emerald-400 border-emerald-500/30': s.estado === 'APROBADO',
-                      'bg-red-500/20 text-red-400 border-red-500/30': s.estado === 'RECHAZADO'
-                    }"
-                    class="text-[10px] font-bold px-2 py-0.5 rounded uppercase border"
-                  >
-                    {{ s.estado }}
-                  </span>
-                </div>
-                <p class="text-xs text-zinc-400">👤 Solicitante: <strong :class="esModoOscuro ? 'text-white' : 'text-slate-800'">{{ s.solicitante?.nombre }}</strong> ({{ s.solicitante?.email }})</p>
-                <div class="text-[11px] font-mono text-zinc-400 pt-0.5">
-                  📅 Fecha Inicio: <strong>{{ s.fechaInicio }}</strong> | Días: <strong>{{ s.numDias }} día(s)</strong> | Duración: <strong>{{ s.duracionDia }}</strong>
-                </div>
-                <p class="text-xs italic text-zinc-400 pt-1">💬 Motivo: {{ s.motivo }}</p>
-              </div>
+  <div v-if="loading" class="text-xs text-zinc-500 animate-pulse">Cargando solicitudes...</div>
+  <div v-else class="space-y-3">
+    <div 
+      v-for="s in solicitudes" 
+      :key="s.id" 
+      :class="esModoOscuro ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-slate-200 shadow-sm'" 
+      class="rounded-2xl border p-5 flex flex-col md:flex-row md:items-center justify-between gap-4"
+    >
+      <div class="space-y-1 text-left">
+        <div class="flex items-center gap-2">
+          <span class="font-black text-sm">{{ s.categoria }} ({{ s.tipoPermiso }})</span>
+          <span 
+            :class="{
+              'bg-amber-500/20 text-amber-400 border-amber-500/30': s.estado === 'PENDIENTE',
+              'bg-emerald-500/20 text-emerald-400 border-emerald-500/30': s.estado === 'APROBADO',
+              'bg-red-500/20 text-red-400 border-red-500/30': s.estado === 'RECHAZADO'
+            }"
+            class="text-[10px] font-bold px-2 py-0.5 rounded uppercase border"
+          >
+            {{ s.estado }}
+          </span>
+        </div>
+        <p class="text-xs text-zinc-400">👤 Solicitante: <strong :class="esModoOscuro ? 'text-white' : 'text-slate-800'">{{ s.solicitante?.nombre }}</strong> ({{ s.solicitante?.email }})</p>
+        <div class="text-[11px] font-mono text-zinc-400 pt-0.5">
+          📅 Fecha Inicio: <strong>{{ s.fechaInicio }}</strong> | Días: <strong>{{ s.numDias }} día(s)</strong> | Duración: <strong>{{ s.duracionDia }}</strong>
+        </div>
+        <p class="text-xs italic text-zinc-400 pt-1">💬 Motivo: {{ s.motivo }}</p>
 
-              <!-- BOTONES APROBAR/RECHAZAR PARA ADMIN/JEFE/OWNER -->
-              <div v-if="esAdminOJefe && s.estado === 'PENDIENTE'" class="shrink-0 flex gap-2">
-                <button @click="evaluarSolicitud(s.id, true)" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-4 py-2 rounded-xl cursor-pointer">
-                  ✓ Aprobar
-                </button>
-                <button @click="evaluarSolicitud(s.id, false)" class="bg-red-600 hover:bg-red-700 text-white font-bold text-xs px-4 py-2 rounded-xl cursor-pointer">
-                  ✕ Rechazar
-                </button>
-              </div>
-            </div>
-          </div>
-        </section>
+        <!-- 🔻 AGREGA ESTA LÍNEA AQUÍ 🔻 -->
+        <p v-if="s.comentarioEvaluador" class="text-xs font-mono text-red-400 pt-1">
+          🚫 Motivo Rechazo / Observación: {{ s.comentarioEvaluador }}
+        </p>
+      </div>
+
+      <!-- BOTONES APROBAR/RECHAZAR EXCLUSIVOS PARA RH, JEFE Y OWNER -->
+      <div v-if="puedeEvaluarPermisos && s.estado === 'PENDIENTE'" class="shrink-0 flex gap-2">
+        <button @click="evaluarSolicitud(s.id, true)" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-4 py-2 rounded-xl cursor-pointer">
+          ✓ Aprobar
+        </button>
+        <button @click="evaluarSolicitud(s.id, false)" class="bg-red-600 hover:bg-red-700 text-white font-bold text-xs px-4 py-2 rounded-xl cursor-pointer">
+          ✕ Rechazar
+        </button>
+      </div>
+    </div>
+  </div>
+</section>
 
       </main>
 
