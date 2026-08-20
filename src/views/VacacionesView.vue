@@ -3,7 +3,9 @@ import { ref, computed, onMounted } from 'vue'
 import Sidebar from '../components/Sidebar.vue'
 import { useQuery, useMutation } from '@vue/apollo-composable'
 import { gql } from '@apollo/client/core'
+import { useRouter } from 'vue-router'
 
+const router = useRouter()
 const esModoOscuro = ref(true)
 
 // HOY Y CONTROL DE FECHAS
@@ -128,6 +130,7 @@ const OBTENER_VACACIONES_DATOS = gql`
       nombre
       email
       rol
+      fotoUrl
       diasVacaciones
     }
     obtenerSolicitudesPermisos {
@@ -311,32 +314,37 @@ onMounted(() => {
     <Sidebar :dark="esModoOscuro" />
 
     <div class="flex-1 flex flex-col min-w-0 h-screen overflow-hidden relative">
-<header :class="esModoOscuro ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-slate-200'" class="h-16 border-b px-8 flex justify-between items-center shrink-0">
-  <div class="flex items-center space-x-3">
-    <span class="text-xs font-black bg-red-700 text-white px-2.5 py-0.5 rounded-md tracking-wider">RELANT HR</span>
-    <h2 class="text-lg font-black tracking-tight">Vacaciones, Permisos e Incidencias</h2>
-  </div>
+      
+      <!-- HEADER CON PROFILE BADGE IDÉNTICO A GRAFICAS.VIEW -->
+      <header :class="esModoOscuro ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-slate-200'" class="h-16 border-b px-4 sm:px-8 flex justify-between items-center shrink-0">
+        <div class="flex items-center space-x-2 sm:space-x-3 min-w-0">
+          <span class="text-[10px] sm:text-xs font-black bg-red-700 text-white px-2.5 py-0.5 rounded-md tracking-wider">RELANT HR</span>
+          <h2 class="text-sm sm:text-lg font-black tracking-tight truncate">Vacaciones, Permisos e Incidencias</h2>
+        </div>
 
-  <!-- 👤 PROFILE BADGE (IGUAL AL MÓDULO DE TICKETS) -->
-  <div :class="esModoOscuro ? 'bg-zinc-950/80 border-zinc-800' : 'bg-slate-100 border-slate-200'" class="border px-3.5 py-1.5 rounded-2xl flex items-center gap-3">
-    <div class="relative">
-      <img 
-        :src="usuarioActual?.fotoUrl || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(usuarioActual?.nombre || 'Usuario') + '&background=b91c1c&color=fff'" 
-        class="w-8 h-8 rounded-full object-cover border border-red-600/50" 
-        alt="Perfil"
-      />
-      <span class="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-emerald-500 border-2 border-zinc-950 rounded-full"></span>
-    </div>
-    <div class="text-left hidden sm:block">
-      <span class="text-xs font-bold block leading-tight" :class="esModoOscuro ? 'text-white' : 'text-slate-800'">
-        {{ usuarioActual?.nombre || 'Cargando...' }}
-      </span>
-      <span class="text-[10px] text-emerald-400 font-semibold block leading-tight">
-        • {{ usuarioActual?.rol || 'Operador' }} Activo
-      </span>
-    </div>
-  </div>
-</header>
+        <div 
+          @click="router.push('/perfil')" 
+          :class="esModoOscuro ? 'bg-zinc-900 hover:bg-zinc-800 border-zinc-800/80 text-white' : 'bg-white hover:bg-slate-100 border-slate-200 text-slate-800'"
+          class="flex items-center space-x-3 px-3 py-1.5 rounded-2xl border cursor-pointer transition-all shadow-sm group"
+          title="Ver y Configurar mi Perfil"
+        >
+          <div class="w-8 h-8 rounded-full overflow-hidden border-2 border-red-600 bg-zinc-800 flex items-center justify-center shrink-0 shadow-sm">
+            <img v-if="usuarioActual?.fotoUrl" :src="usuarioActual.fotoUrl" alt="Avatar" class="w-full h-full object-cover" />
+            <span v-else class="text-xs font-black text-white">
+              {{ usuarioActual?.nombre?.charAt(0).toUpperCase() || '👤' }}
+            </span>
+          </div>
+
+          <div class="hidden sm:flex flex-col text-left min-w-0">
+            <span class="text-xs font-bold truncate group-hover:text-red-500 transition-colors">
+              {{ usuarioActual?.nombre || 'Mi Perfil' }}
+            </span>
+            <span class="text-[9px] font-mono text-emerald-500 font-bold leading-none">
+              ● Operador Activo
+            </span>
+          </div>
+        </div>
+      </header>
 
       <main class="flex-1 overflow-y-auto p-6 space-y-8 max-w-7xl mx-auto w-full pb-24">
 
