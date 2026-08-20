@@ -13,6 +13,15 @@ const padM = String(hoy.getMonth() + 1).padStart(2, '0')
 const padD = String(hoy.getDate()).padStart(2, '0')
 const hoyStr = `${hoy.getFullYear()}-${padM}-${padD}`
 
+// HELPER FORMATO DE FECHA (DD/MM/AAAA)
+const formatearFecha = (fechaStr: string) => {
+  if (!fechaStr) return ''
+  const partes = fechaStr.split('-')
+  if (partes.length !== 3) return fechaStr
+  const [year, month, day] = partes
+  return `${day}/${month}/${year}`
+}
+
 // LÓGICA DEL CALENDARIO DINÁMICO
 const fechaCalendario = ref(new Date(hoy.getFullYear(), hoy.getMonth(), 1))
 const fechasSeleccionadas = ref<string[]>([])
@@ -134,6 +143,7 @@ const OBTENER_VACACIONES_DATOS = gql`
       estado
       fechaSolicitud
       solicitante { id nombre email diasVacaciones }
+      evaluador { id nombre email rol }
     }
   }
 `
@@ -271,7 +281,7 @@ const evaluarSolicitud = async (solicitudId: string, aprobado: boolean) => {
 
   if (!aprobado) {
     const motivo = prompt('Por favor ingresa la razón / motivo del rechazo:')
-    if (motivo === null) return // Cancelado por el usuario
+    if (motivo === null) return
     if (!motivo.trim()) {
       alert('❌ Es obligatorio ingresar la razón del rechazo.')
       return
@@ -301,21 +311,32 @@ onMounted(() => {
     <Sidebar :dark="esModoOscuro" />
 
     <div class="flex-1 flex flex-col min-w-0 h-screen overflow-hidden relative">
-      <header :class="esModoOscuro ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-slate-200'" class="h-16 border-b px-8 flex justify-between items-center shrink-0">
-        <div class="flex items-center space-x-3">
-          <span class="text-xs font-black bg-red-700 text-white px-2.5 py-0.5 rounded-md tracking-wider">RELANT HR</span>
-          <h2 class="text-lg font-black tracking-tight">Vacaciones, Permisos e Incidencias</h2>
-        </div>
+<header :class="esModoOscuro ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-slate-200'" class="h-16 border-b px-8 flex justify-between items-center shrink-0">
+  <div class="flex items-center space-x-3">
+    <span class="text-xs font-black bg-red-700 text-white px-2.5 py-0.5 rounded-md tracking-wider">RELANT HR</span>
+    <h2 class="text-lg font-black tracking-tight">Vacaciones, Permisos e Incidencias</h2>
+  </div>
 
-        <!-- 🏖️ DÍAS DISPONIBLES DE VACACIONES -->
-        <div :class="esModoOscuro ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-slate-200 shadow-sm'" class="border px-4 py-1.5 rounded-2xl flex items-center gap-3">
-          <span class="text-xl">🏖️</span>
-          <div class="text-left">
-            <span class="text-[10px] uppercase font-bold text-red-500 block leading-tight">Días de Vacaciones Disponibles</span>
-            <span class="text-sm font-black font-mono" :class="esModoOscuro ? 'text-white' : 'text-slate-800'">{{ usuarioActual?.diasVacaciones ?? '--' }} días</span>
-          </div>
-        </div>
-      </header>
+  <!-- 👤 PROFILE BADGE (IGUAL AL MÓDULO DE TICKETS) -->
+  <div :class="esModoOscuro ? 'bg-zinc-950/80 border-zinc-800' : 'bg-slate-100 border-slate-200'" class="border px-3.5 py-1.5 rounded-2xl flex items-center gap-3">
+    <div class="relative">
+      <img 
+        :src="usuarioActual?.fotoUrl || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(usuarioActual?.nombre || 'Usuario') + '&background=b91c1c&color=fff'" 
+        class="w-8 h-8 rounded-full object-cover border border-red-600/50" 
+        alt="Perfil"
+      />
+      <span class="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-emerald-500 border-2 border-zinc-950 rounded-full"></span>
+    </div>
+    <div class="text-left hidden sm:block">
+      <span class="text-xs font-bold block leading-tight" :class="esModoOscuro ? 'text-white' : 'text-slate-800'">
+        {{ usuarioActual?.nombre || 'Cargando...' }}
+      </span>
+      <span class="text-[10px] text-emerald-400 font-semibold block leading-tight">
+        • {{ usuarioActual?.rol || 'Operador' }} Activo
+      </span>
+    </div>
+  </div>
+</header>
 
       <main class="flex-1 overflow-y-auto p-6 space-y-8 max-w-7xl mx-auto w-full pb-24">
 
@@ -364,20 +385,32 @@ onMounted(() => {
             <!-- COLUMNA DERECHA: FORMULARIO OPCIONES Y CATEGORÍAS -->
             <div class="lg:col-span-7 space-y-5 text-left">
               
-              <!-- SELECCIÓN RADIO DE DURACIÓN DEL DÍA -->
-              <div class="flex flex-wrap gap-6 items-center pt-1">
-                <label class="flex items-center gap-2 cursor-pointer">
-                  <input type="radio" v-model="duracionDia" value="DIA_COMPLETO" class="w-4 h-4 accent-red-600" />
-                  <span class="text-xs font-bold" :class="esModoOscuro ? 'text-zinc-300' : 'text-slate-700'">Día completo</span>
-                </label>
-                <label class="flex items-center gap-2 cursor-pointer">
-                  <input type="radio" v-model="duracionDia" value="PRIMERA_MITAD" class="w-4 h-4 accent-red-600" />
-                  <span class="text-xs font-bold" :class="esModoOscuro ? 'text-zinc-300' : 'text-slate-700'">Primera mitad</span>
-                </label>
-                <label class="flex items-center gap-2 cursor-pointer">
-                  <input type="radio" v-model="duracionDia" value="SEGUNDA_MITAD" class="w-4 h-4 accent-red-600" />
-                  <span class="text-xs font-bold" :class="esModoOscuro ? 'text-zinc-300' : 'text-slate-700'">Segunda mitad</span>
-                </label>
+              <!-- DURACIÓN DÍA + 🏖️ TARJETA DÍAS DISPONIBLES EN EL HUECO DERECHO -->
+              <div class="flex flex-wrap justify-between items-center gap-4 pt-1">
+                <div class="flex flex-wrap gap-4 items-center">
+                  <label class="flex items-center gap-2 cursor-pointer">
+                    <input type="radio" v-model="duracionDia" value="DIA_COMPLETO" class="w-4 h-4 accent-red-600" />
+                    <span class="text-xs font-bold" :class="esModoOscuro ? 'text-zinc-300' : 'text-slate-700'">Día completo</span>
+                  </label>
+                  <label class="flex items-center gap-2 cursor-pointer">
+                    <input type="radio" v-model="duracionDia" value="PRIMERA_MITAD" class="w-4 h-4 accent-red-600" />
+                    <span class="text-xs font-bold" :class="esModoOscuro ? 'text-zinc-300' : 'text-slate-700'">Primera mitad</span>
+                  </label>
+                  <label class="flex items-center gap-2 cursor-pointer">
+                    <input type="radio" v-model="duracionDia" value="SEGUNDA_MITAD" class="w-4 h-4 accent-red-600" />
+                    <span class="text-xs font-bold" :class="esModoOscuro ? 'text-zinc-300' : 'text-slate-700'">Segunda mitad</span>
+                  </label>
+                </div>
+
+                <div :class="esModoOscuro ? 'bg-zinc-950 border-zinc-800' : 'bg-slate-100 border-slate-200'" class="border px-3 py-1.5 rounded-xl flex items-center gap-2 shrink-0">
+                  <span class="text-base">🏖️</span>
+                  <div class="text-left">
+                    <span class="text-[9px] uppercase font-bold text-red-500 block leading-tight">Días Disponibles</span>
+                    <span class="text-xs font-black font-mono" :class="esModoOscuro ? 'text-white' : 'text-slate-800'">
+                      {{ usuarioActual?.diasVacaciones ?? '--' }} días
+                    </span>
+                  </div>
+                </div>
               </div>
 
               <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -431,56 +464,62 @@ onMounted(() => {
           </form>
         </section>
 
-       <!-- 📋 BITÁCORA Y EVALUACIÓN DE SOLICITUDES -->
-<section class="space-y-4 text-left">
-  <h3 class="text-xs font-black uppercase tracking-wider text-zinc-400">📋 Solicitudes e Historial de Permisos</h3>
+        <!-- 📋 BITÁCORA Y EVALUACIÓN DE SOLICITUDES -->
+        <section class="space-y-4 text-left">
+          <h3 class="text-xs font-black uppercase tracking-wider text-zinc-400">📋 Solicitudes e Historial de Permisos</h3>
 
-  <div v-if="loading" class="text-xs text-zinc-500 animate-pulse">Cargando solicitudes...</div>
-  <div v-else class="space-y-3">
-    <div 
-      v-for="s in solicitudes" 
-      :key="s.id" 
-      :class="esModoOscuro ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-slate-200 shadow-sm'" 
-      class="rounded-2xl border p-5 flex flex-col md:flex-row md:items-center justify-between gap-4"
-    >
-      <div class="space-y-1 text-left">
-        <div class="flex items-center gap-2">
-          <span class="font-black text-sm">{{ s.categoria }} ({{ s.tipoPermiso }})</span>
-          <span 
-            :class="{
-              'bg-amber-500/20 text-amber-400 border-amber-500/30': s.estado === 'PENDIENTE',
-              'bg-emerald-500/20 text-emerald-400 border-emerald-500/30': s.estado === 'APROBADO',
-              'bg-red-500/20 text-red-400 border-red-500/30': s.estado === 'RECHAZADO'
-            }"
-            class="text-[10px] font-bold px-2 py-0.5 rounded uppercase border"
-          >
-            {{ s.estado }}
-          </span>
-        </div>
-        <p class="text-xs text-zinc-400">👤 Solicitante: <strong :class="esModoOscuro ? 'text-white' : 'text-slate-800'">{{ s.solicitante?.nombre }}</strong> ({{ s.solicitante?.email }})</p>
-        <div class="text-[11px] font-mono text-zinc-400 pt-0.5">
-          📅 Fecha Inicio: <strong>{{ s.fechaInicio }}</strong> | Días: <strong>{{ s.numDias }} día(s)</strong> | Duración: <strong>{{ s.duracionDia }}</strong>
-        </div>
-        <p class="text-xs italic text-zinc-400 pt-1">💬 Motivo: {{ s.motivo }}</p>
+          <div v-if="loading" class="text-xs text-zinc-500 animate-pulse">Cargando solicitudes...</div>
+          <div v-else class="space-y-3">
+            <div 
+              v-for="s in solicitudes" 
+              :key="s.id" 
+              :class="esModoOscuro ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-slate-200 shadow-sm'" 
+              class="rounded-2xl border p-5 flex flex-col md:flex-row md:items-center justify-between gap-4"
+            >
+              <div class="space-y-1 text-left">
+                <div class="flex items-center gap-2">
+                  <span class="font-black text-sm">{{ s.categoria }} ({{ s.tipoPermiso }})</span>
+                  <span 
+                    :class="{
+                      'bg-amber-500/20 text-amber-400 border-amber-500/30': s.estado === 'PENDIENTE',
+                      'bg-emerald-500/20 text-emerald-400 border-emerald-500/30': s.estado === 'APROBADO',
+                      'bg-red-500/20 text-red-400 border-red-500/30': s.estado === 'RECHAZADO'
+                    }"
+                    class="text-[10px] font-bold px-2 py-0.5 rounded uppercase border"
+                  >
+                    {{ s.estado }}
+                  </span>
+                </div>
+                <p class="text-xs text-zinc-400">👤 Solicitante: <strong :class="esModoOscuro ? 'text-white' : 'text-slate-800'">{{ s.solicitante?.nombre }}</strong> ({{ s.solicitante?.email }})</p>
+                <div class="text-[11px] font-mono text-zinc-400 pt-0.5">
+                  📅 Fecha Inicio: <strong>{{ formatearFecha(s.fechaInicio) }}</strong> | Días: <strong>{{ s.numDias }} día(s)</strong> | Duración: <strong>{{ s.duracionDia }}</strong>
+                </div>
+                <p class="text-xs italic text-zinc-400 pt-1">💬 Motivo: {{ s.motivo }}</p>
 
-        <!-- 🔻 AGREGA ESTA LÍNEA AQUÍ 🔻 -->
-        <p v-if="s.comentarioEvaluador" class="text-xs font-mono text-red-400 pt-1">
-          🚫 Motivo Rechazo / Observación: {{ s.comentarioEvaluador }}
-        </p>
-      </div>
+                <!-- MOTIVO DE RECHAZO SI EXISTE -->
+                <p v-if="s.comentarioEvaluador" class="text-xs font-mono text-red-400 pt-1">
+                  🚫 Motivo Rechazo / Observación: {{ s.comentarioEvaluador }}
+                </p>
 
-      <!-- BOTONES APROBAR/RECHAZAR EXCLUSIVOS PARA RH, JEFE Y OWNER -->
-      <div v-if="puedeEvaluarPermisos && s.estado === 'PENDIENTE'" class="shrink-0 flex gap-2">
-        <button @click="evaluarSolicitud(s.id, true)" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-4 py-2 rounded-xl cursor-pointer">
-          ✓ Aprobar
-        </button>
-        <button @click="evaluarSolicitud(s.id, false)" class="bg-red-600 hover:bg-red-700 text-white font-bold text-xs px-4 py-2 rounded-xl cursor-pointer">
-          ✕ Rechazar
-        </button>
-      </div>
-    </div>
-  </div>
-</section>
+                <!-- MOSTRAR QUIÉN EVALUÓ -->
+                <p v-if="s.estado !== 'PENDIENTE' && s.evaluador" class="text-xs font-semibold text-zinc-300 pt-1">
+                  👤 {{ s.estado === 'APROBADO' ? 'Aprobado por:' : 'Rechazado por:' }} 
+                  <span class="text-red-400 font-bold">{{ s.evaluador.nombre }}</span> ({{ s.evaluador.rol }})
+                </p>
+              </div>
+
+              <!-- BOTONES EXCLUSIVOS RH, JEFE Y OWNER -->
+              <div v-if="puedeEvaluarPermisos && s.estado === 'PENDIENTE'" class="shrink-0 flex gap-2">
+                <button @click="evaluarSolicitud(s.id, true)" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-4 py-2 rounded-xl cursor-pointer">
+                  ✓ Aprobar
+                </button>
+                <button @click="evaluarSolicitud(s.id, false)" class="bg-red-600 hover:bg-red-700 text-white font-bold text-xs px-4 py-2 rounded-xl cursor-pointer">
+                  ✕ Rechazar
+                </button>
+              </div>
+            </div>
+          </div>
+        </section>
 
       </main>
 
